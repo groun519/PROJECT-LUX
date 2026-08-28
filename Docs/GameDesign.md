@@ -1939,6 +1939,9 @@ PROJECT LUX는 플레이 중 화면 위에 지속적으로 정보를 표시하�
 17. 모든 기생물 사망 시 즉시 종료 기본값
 18. 관전자 이동/시점 규칙
 19. 외부 테스트용 정확한 한 판 목표 시간
+20. Main Menu / Lobby 최종 구조
+21. Session 참여 UX: 방 코드/Session Key, Steam Invite, Session Browser, Quick Join 중 어떤 방식을 사용할지
+22. Lobby Ready / Room Settings UI 구조
 
 ---
 
