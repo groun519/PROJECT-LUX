@@ -1,0 +1,784 @@
+# Phase 00 - Multiplayer Foundation
+
+> 상태: Planned  
+> 엔진: Unreal Engine 5.8  
+> 목표: PROJECT LUX의 모든 후속 시스템이 올라갈 최소 멀티플레이 Character / Session 기반을 만든다.
+
+---
+
+# 1. 완료 목표
+
+Phase 00 완료 시 다음이 가능해야 한다.
+
+1. 한 플레이어가 Listen Server 세션을 생성할 수 있다.
+2. 다른 플레이어가 세션을 검색하고 참가할 수 있다.
+3. 최소 6개의 Player Spawn을 지원한다.
+4. 각 플레이어가 자신의 Character를 Possess한다.
+5. 모든 플레이어의 위치와 회전이 정상 복제된다.
+6. 1인칭 카메라로 이동하고 바라볼 수 있다.
+7. 다른 Client에서는 해당 플레이어의 3인칭 Character가 보인다.
+8. PlayerState가 접속/퇴장 과정에서 정상 유지/정리된다.
+9. Host 종료 시 세션이 정상 종료된다.
+10. Phase 01에서 Revolver Actor를 붙일 위치와 애니메이션 기반이 준비된다.
+
+Phase 완료 Milestone:
+
+**6인 Listen Server에서 각 플레이어가 같은 시설 공간을 돌아다니며 서로의 캐릭터를 정상적으로 볼 수 있다.**
+
+
+---
+
+# 1A. Checkpoint 실행 계획
+
+Phase 00은 한 번에 구현하지 않는다. 아래 Checkpoint를 순서대로 하나씩 완료하고, 매 단계에서 검수 후 커밋한다.
+
+## 공통 실행 규칙
+
+Codex는 현재 Checkpoint만 구현한다.
+
+- 다음 Checkpoint의 코드를 미리 작성하지 않는다.
+- 현재 Checkpoint 범위를 벗어난 리팩토링을 하지 않는다.
+- 구현 후 빌드 또는 지정 테스트를 수행한다.
+- 변경 파일 목록, 구현 요약, 테스트 결과, 남은 문제를 보고한다.
+- 보고 후 작업을 멈춘다.
+- 검수 승인 전에는 다음 Checkpoint로 넘어가지 않는다.
+- 커밋은 검수 통과 후 수행한다.
+
+Checkpoint 완료 보고 형식:
+
+1. Changed Files
+2. Implemented
+3. Tests Run
+4. Test Result
+5. Manual Editor Steps
+6. Known Issues
+7. Ready for Review
+
+---
+
+## 00-A - Project & Asset Preflight
+
+### 목적
+
+코드를 쌓기 전에 UE 5.8 프로젝트와 Phase 00에서 사용할 실제 에셋이 정상적으로 열리는지 확인한다.
+
+### 범위
+
+- 프로젝트 UE 5.8 Open / Build 확인
+- Big Star Station 확인
+- Stylized Character Kit: Casual 01 확인
+- Animation Starter Pack 확인
+- 프로젝트 Content 구조 확인
+- 작은 FPS Test Facility를 만들 수 있는 환경인지 확인
+
+### 하지 않는 것
+
+- Session 구현
+- Character gameplay 코드
+- Revolver 코드
+- R21 리볼버 애니메이션 통합
+- 최종 맵 제작
+
+### 작업 순서
+
+1. 프로젝트를 UE 5.8에서 연다.
+2. C++ Target이 존재하면 Development Editor 빌드를 확인한다.
+3. 다운로드/추가된 세 에셋이 Content Browser에서 정상 로드되는지 확인한다.
+4. 각 에셋의 주요 Skeleton / Mesh / Animation 위치를 기록한다.
+5. Big Star Station의 벽, 바닥, 천장, 복도, 조명 중 최소 구성으로 작은 Test Facility를 만든다.
+6. PlayerStart 6개를 배치할 수 있는 공간을 확보한다.
+7. Casual 01의 Skeleton과 Animation Starter Pack의 Skeleton 차이를 확인하고 Retarget 필요 여부를 기록한다.
+
+### 검수 기준
+
+- UE 5.8에서 프로젝트 Open 성공
+- Editor 치명 오류 없음
+- Big Star Station 주요 Mesh 로드 가능
+- Casual 01 Mesh/Skeleton 로드 가능
+- Animation Starter Pack 로드 가능
+- Test Facility 저장 가능
+- Asset 경로와 Skeleton 정보가 보고됨
+
+### 커밋 게이트
+
+검수 통과 후에만 커밋한다.
+
+권장 커밋 메시지:
+
+```text
+chore: validate phase 00 assets and test facility
+```
+
+---
+
+## 00-B - C++ Framework Skeleton
+
+### 목적
+
+후속 시스템이 의존할 최소 Framework 클래스만 만든다.
+
+### 범위
+
+- ULuxGameInstance
+- ULuxSessionSubsystem
+- ALuxGameMode
+- ALuxGameState
+- ALuxPlayerController
+- ALuxPlayerState
+- ALuxCharacter
+- 필요한 Build.cs 모듈 의존성
+
+### 하지 않는 것
+
+- Session Create / Find / Join 구현
+- Move / Look 구현
+- Weapon
+- Damage / Death
+- Round / Role
+
+### 작업 순서
+
+1. 클래스 파일을 역할별 폴더에 생성한다.
+2. GameMode 기본 Class 연결을 준비한다.
+3. SessionSubsystem은 생성만 하고 API 구현은 비워둔다.
+4. Character는 ACharacter 기반으로 생성하고 CameraComponent를 둘 자리만 준비한다.
+5. 프로젝트 전체를 컴파일한다.
+6. Editor 재실행 후 기본 GameMode 설정이 깨지지 않는지 확인한다.
+
+### 검수 기준
+
+- 전체 C++ 빌드 성공
+- Editor 실행 성공
+- 새 클래스가 올바른 모듈에 존재
+- 서로 불필요하게 참조하지 않음
+- Phase 00 범위를 벗어난 게임 규칙 없음
+
+### 커밋 게이트
+
+권장 커밋 메시지:
+
+```text
+feat: add multiplayer framework skeleton
+```
+
+---
+
+## 00-C - Local First-Person Character
+
+### 목적
+
+네트워크와 세션을 붙이기 전에 로컬 1인칭 이동 기반을 확정한다.
+
+### 범위
+
+- CameraComponent
+- Enhanced Input
+- IA_Move
+- IA_Look
+- IMC_Player
+- Move
+- Look
+- Local Possess
+
+### 하지 않는 것
+
+- Jump
+- Crouch
+- Sprint
+- Revolver
+- Session
+- 별도 FPS Arms
+
+### 작업 순서
+
+1. ALuxCharacter에 CameraComponent를 구성한다.
+2. IA_Move / IA_Look / IMC_Player를 만든다.
+3. C++에서 Input Mapping Context를 등록한다.
+4. Move를 CharacterMovement에 연결한다.
+5. Look을 Controller Rotation에 연결한다.
+6. Test Facility에서 단일 플레이어 Possess를 검증한다.
+7. 카메라 높이와 캐릭터 스케일을 Big Star Station 환경에 맞춘다.
+
+### 검수 기준
+
+- 로컬 Move 정상
+- Look 정상
+- 입력 중복 없음
+- HUD / Crosshair 없음
+- Jump/Crouch/Sprint가 임의 추가되지 않음
+- 시설 스케일이 1인칭에서 자연스러움
+
+### 커밋 게이트
+
+권장 커밋 메시지:
+
+```text
+feat: add first person movement foundation
+```
+
+---
+
+## 00-D - Replicated Character & Third-Person Body
+
+### 목적
+
+2인 PIE에서 서로의 캐릭터와 이동을 정상적으로 볼 수 있게 한다.
+
+### 범위
+
+- CharacterMovement 기본 복제
+- Remote Third-Person Mesh
+- Casual 01 적용
+- Animation Starter Pack Retarget
+- 최소 Locomotion Animation Blueprint
+- 2 Player PIE
+
+### 하지 않는 것
+
+- 상체 리볼버 레이어
+- Head IK
+- Revolver
+- Session 검색 UI
+
+### 작업 순서
+
+1. ALuxCharacter의 Replication 기본 설정을 확인한다.
+2. 불필요한 자체 Transform RPC를 만들지 않는다.
+3. Casual 01 캐릭터를 Remote Mesh에 연결한다.
+4. Animation Starter Pack의 필요한 Idle/Walk 계열을 Retarget한다.
+5. 프로젝트용 최소 Third-Person AnimBP를 만든다.
+6. Speed / Direction 기반 Locomotion을 연결한다.
+7. 2 Player PIE에서 양쪽 이동/회전/메시/애니메이션을 확인한다.
+
+### 검수 기준
+
+- Host에서 Client 이동 정상
+- Client에서 Host 이동 정상
+- 심각한 위치 jitter 없음
+- Remote Mesh 정상 표시
+- Locomotion 정상
+- Local owner 표시 정책이 의도대로 동작
+- Animation BP가 Gameplay truth를 소유하지 않음
+
+### 커밋 게이트
+
+권장 커밋 메시지:
+
+```text
+feat: replicate player character and locomotion
+```
+
+---
+
+## 00-E - Listen Server Session Flow
+
+### 목적
+
+동일 Character 기반을 실제 Session 흐름으로 연결한다.
+
+### 범위
+
+- Create Session
+- Find Sessions
+- Join Session
+- Destroy Session
+- Listen Travel
+- Client Travel
+- ActiveSessionName 관리
+- 개발용 Console/Exec 진입점
+
+### 하지 않는 것
+
+- Lobby UI
+- Matchmaking UI
+- Room Settings
+- Ready System
+- Role assignment
+
+### 작업 순서
+
+1. ULuxSessionSubsystem에 Online Session Interface를 연결한다.
+2. Create API를 구현한다.
+3. Find API를 구현한다.
+4. 특정 Search Result로 Join하는 API를 구현한다.
+5. ActiveSessionName을 Subsystem이 관리한다.
+6. Destroy API를 구현한다.
+7. Host Listen Travel과 Client Travel을 연결한다.
+8. 개발용 호출 경로로 UI 없이 테스트 가능하게 한다.
+9. NULL/LAN 또는 현재 사용 가능한 Online Subsystem에서 검증한다.
+
+### 검수 기준
+
+- Host session 생성 성공
+- Client 검색 성공
+- Client join 성공
+- 두 플레이어 Spawn/Possess 성공
+- Destroy 성공
+- NAME_GameSession 하드코딩 의존 없음
+- Character/GameMode에 Session 로직이 섞이지 않음
+
+### 커밋 게이트
+
+권장 커밋 메시지:
+
+```text
+feat: add listen server session flow
+```
+
+---
+
+## 00-F - Six-Player Integration QA
+
+### 목적
+
+Phase 00 전체를 5~6인 실제 목표 규모에서 검증하고 닫는다.
+
+### 범위
+
+- 6 Player Spawn
+- Join In Progress
+- Disconnect
+- Host Exit
+- PlayerState
+- Standalone / Multi-process
+- 최종 Phase 00 문서 결과 기록
+
+### 작업 순서
+
+1. PlayerStart 6개를 충돌 없이 배치한다.
+2. 2 Player 기본 회귀 테스트를 먼저 수행한다.
+3. 6 Player PIE 또는 Multi-process 테스트를 수행한다.
+4. 모든 PlayerState 존재 여부를 확인한다.
+5. 진행 중 Session에 Client를 추가한다.
+6. Client Disconnect를 확인한다.
+7. Host 종료 시 Session/Client 정리를 확인한다.
+8. Standalone 환경에서 최소 Host/Join 흐름을 재검증한다.
+9. Phase 00 Completion Checklist를 갱신한다.
+10. Result / Changed from Plan / Remaining을 작성한다.
+
+### 검수 기준
+
+- 6 Player Spawn overlap 없음
+- 6명 모두 이동 가능
+- 서로의 Remote Character 확인 가능
+- PlayerState 정상
+- JIP 정상
+- Client 이탈 후 치명 오류 없음
+- Host 종료 후 hanging 없음
+- Standalone에서 핵심 흐름 작동
+
+### Phase 완료 커밋
+
+권장 커밋 메시지:
+
+```text
+feat: complete multiplayer foundation
+```
+
+---
+
+# 2. 구현 범위
+
+## 2.1 C++ Framework
+
+생성할 기본 클래스:
+
+- ULuxGameInstance
+- ULuxSessionSubsystem
+- ALuxGameMode
+- ALuxGameState
+- ALuxPlayerController
+- ALuxPlayerState
+- ALuxCharacter
+
+필요한 경우 이름은 프로젝트 기존 Naming Convention에 맞춰 조정할 수 있으나 역할은 유지한다.
+
+## 2.2 세션
+
+Online Subsystem 인터페이스를 사용한다.
+
+기본 기능:
+
+- Create Session
+- Find Sessions
+- Join Session
+- Destroy Session
+- Host Listen Travel
+- Client Travel
+- Join-in-progress 허용
+- Host 종료 시 Destroy
+
+구현 원칙:
+
+- 세션 로직을 Character나 GameMode에 넣지 않는다.
+- ULuxSessionSubsystem이 Session Interface를 소유한다.
+- UI와 독립적인 API로 작성한다.
+- Phase 00에서는 개발용 Console/Exec 진입점을 허용한다.
+- 후속 Lobby UI는 같은 API를 호출한다.
+- 하드코딩된 NAME_GameSession에 전체 로직을 의존하지 않는다.
+- Runtime에서 생성한 ActiveSessionName을 Subsystem이 보관한다.
+
+테스트 우선순위:
+
+1. OnlineSubsystem NULL / LAN 또는 PIE 환경
+2. Standalone Listen Server
+3. Steam 설정이 준비된 경우 동일 API로 Steam 세션 추가 검증
+
+NULL 테스트는 임시 네트워크 구조가 아니라 동일 IOnlineSessionInterface 구현의 개발용 Backend로 취급한다.
+
+---
+
+# 3. Character 구조
+
+## 3.1 ALuxCharacter
+
+기반:
+
+- ACharacter
+- CharacterMovementComponent 기본 네트워크 복제 사용
+- CameraComponent
+- Third-Person Skeletal Mesh
+- 향후 Equipped Revolver 참조 슬롯
+
+Phase 00에서 구현할 입력:
+
+- Move
+- Look
+
+Jump / Crouch / Sprint는 현재 게임 기획에서 확정되지 않았으므로 임의로 추가하지 않는다.
+
+## 3.2 1인칭 / 3인칭 표시
+
+Local owner:
+
+- 1인칭 Camera 사용
+- Phase 00에서는 자기 3인칭 Mesh를 필요에 따라 OwnerNoSee 처리
+- 별도 FPS Arms는 Phase 01 Revolver Asset 검증 시 연결
+
+Remote player:
+
+- 전체 3인칭 Character Mesh 표시
+- 기본 locomotion 재생
+
+목표는 최종적으로 다음 구조로 확장 가능한 상태다.
+
+```text
+ALuxCharacter
+├─ Camera
+├─ ThirdPersonCharacterMesh
+└─ EquippedRevolver
+   ├─ FirstPersonWeaponVisual
+   └─ ThirdPersonWeaponVisual
+```
+
+---
+
+# 4. PlayerState / GameMode 책임
+
+## ALuxPlayerState
+
+Phase 00에서 최소 보관:
+
+- Player identity 관련 기본 정보
+- Ready/Role 등 후속 필드를 추가할 수 있는 확장 지점
+
+현재 Citizen / Host / Parasite Role은 구현하지 않는다.
+
+## ALuxGameMode
+
+Server only 책임:
+
+- Player Spawn
+- 기본 PlayerController / PlayerState / Character class 지정
+- 접속/퇴장 이벤트
+- 향후 Round System 연결 지점
+
+## ALuxGameState
+
+현재 최소 상태만 둔다.
+
+Phase 00에서 Round timer, Blackout, Escape 상태를 넣지 않는다.
+
+---
+
+# 5. Enhanced Input
+
+Native Enhanced Input을 사용한다.
+
+필요 Asset:
+
+- IA_Move
+- IA_Look
+- IMC_Player
+
+입력 로직은 C++ Character / Controller에서 처리한다.
+
+Ninja Input 등 외부 Input Framework는 사용하지 않는다.
+
+---
+
+# 6. Asset Setup
+
+Phase 00에서는 실제 게임에 계속 사용할 가능성이 높은 자산을 검증한다.
+
+상세 후보는 ../AssetPlan.md 참고.
+
+## 6.1 Big Star Station
+
+목적:
+
+- 시설 기본 Environment Kit 검증
+- FPS scale 검증
+- 실제 네트워크 테스트 공간 제작
+
+작업:
+
+1. 에셋을 UE 5.8 프로젝트에 추가
+2. Demo Map 전체를 Game Map으로 채택하지 않음
+3. 필요한 modular wall/floor/ceiling/door/light/terminal asset만 사용
+4. 작은 L_FPS_TestFacility 레벨 제작
+5. 최소 6개의 PlayerStart 배치
+6. 긴 복도, 작은 방, 교차 공간을 포함해 네트워크 이동 테스트
+
+검증:
+
+- Collision
+- Scale
+- Lumen
+- 1인칭 근거리 품질
+- 기본 GPU/CPU 부담
+- 조명 Mesh 분리 가능성
+
+Phase 00 완료 전에 Adopt / Reject 기록.
+
+## 6.2 Stylized Character Kit: Casual 01
+
+목적:
+
+- 일반 실험 참가자 3인칭 Character 후보
+
+작업:
+
+1. UE 5.8 Migration
+2. Epic Skeleton 상태 확인
+3. UE5 IK Retargeter 설정
+4. 최소 1개 완성 Character 구성
+5. 가능하면 3개 이상의 외형 Variation 확인
+6. Network Character Mesh로 적용
+
+검증:
+
+- UE 5.8 안정성
+- Skeleton
+- Material
+- Modular Mesh 조합
+- Animation retarget
+- 5~6인 화면에서 구분 가능성
+
+기술 또는 아트 문제가 크면 Phase 00을 끝내기 전에 대체 Character 후보를 정한다.
+
+## 6.3 Animation Starter Pack
+
+목적:
+
+- Remote Character lower-body locomotion 기반
+- Phase 01의 Revolver upper-body layer와 결합
+
+작업:
+
+- 필요한 Idle / Walk 계열만 Retarget
+- 불필요한 애니메이션을 프로젝트 로직에 연결하지 않음
+- Animation Blueprint는 프로젝트용으로 별도 제작
+
+외부 Demo Blueprint를 게임 로직 기반으로 사용하지 않는다.
+
+---
+
+# 7. Animation 구조
+
+Third-Person Character Animation Blueprint는 최소 구조로 만든다.
+
+Phase 00:
+
+```text
+Speed
+Direction
+IsInAir (future use 가능)
+    ↓
+Locomotion State
+    ↓
+Output Pose
+```
+
+Phase 01에서 UpperBody Slot / Layered Blend를 추가할 수 있도록 구조를 열어둔다.
+
+Animation State의 Gameplay 판단을 Blueprint 안에 과도하게 넣지 않는다.
+
+Character의 실제 상태는 C++에서 제공한다.
+
+---
+
+# 8. 폴더 기준
+
+권장:
+
+```text
+Source/PROJECT_LUX/
+├─ Framework/
+│  ├─ LuxGameInstance
+│  ├─ LuxSessionSubsystem
+│  ├─ LuxGameMode
+│  └─ LuxGameState
+├─ Player/
+│  ├─ LuxPlayerController
+│  ├─ LuxPlayerState
+│  └─ LuxCharacter
+└─ ...
+
+Content/
+├─ LUX/
+│  ├─ Characters/
+│  ├─ Input/
+│  ├─ Maps/
+│  ├─ Weapons/
+│  ├─ Animation/
+│  ├─ VFX/
+│  └─ Audio/
+└─ ThirdParty/
+   └─ <AssetName>/
+```
+
+Marketplace asset 원본 폴더 구조가 Migration 때문에 유지되어야 하는 경우 억지로 이동하지 않는다.
+
+프로젝트에서 직접 만든 연결 Asset은 Content/LUX 아래에 둔다.
+
+---
+
+# 9. 네트워크 권한 원칙
+
+- GameMode: Server only
+- Session creation/join: Local GameInstance Subsystem
+- Character transform: CharacterMovement replication
+- Gameplay 상태 변경: Server authority
+- Client는 자신이 소유한 Pawn의 입력만 전송
+- 이후 Weapon / Parasite 시스템도 같은 원칙을 따른다
+
+Phase 00에서 불필요한 자체 Transform RPC를 만들지 않는다.
+
+---
+
+# 10. 구현하지 않는 것
+
+Phase 00에서 다음은 하지 않는다.
+
+- Revolver
+- Damage
+- Death
+- Health
+- Ammo
+- Inventory
+- Citizen / Host / Parasite
+- Round State
+- Blackout
+- Light Detection
+- Flashlight
+- Tasks
+- Interaction Framework
+- Escape
+- Spectator
+- Voice Chat
+- Gameplay HUD
+- Crosshair
+- Character customization UI
+- Steam Lobby UI
+- Matchmaking UI
+
+---
+
+# 11. 테스트
+
+## 11.1 2 Player PIE
+
+- Host 생성
+- Client 참가
+- 양쪽 Spawn
+- 이동 복제
+- 회전 복제
+- 서로의 Character 표시
+- Disconnect cleanup
+
+## 11.2 6 Player PIE / Multi-process
+
+- 6 PlayerStart 사용
+- Spawn overlap 없음
+- 모든 PlayerState 존재
+- 이동 중 심각한 jitter 없음
+- 다른 플레이어 mesh/animation 정상 표시
+
+## 11.3 Join In Progress
+
+- 이미 진행 중인 Listen Server에 추가 Client 접속
+- 정상 Spawn / Possess
+- 기존 플레이어를 정상적으로 볼 수 있음
+
+## 11.4 Host Exit
+
+- Host 종료
+- 세션 cleanup
+- Client가 비정상 hanging 상태로 남지 않음
+
+## 11.5 Standalone
+
+PIE에서만 동작하고 Standalone에서 실패하는 코드를 허용하지 않는다.
+
+---
+
+# 12. Completion Checklist
+
+- [ ] C++ Framework classes 생성
+- [ ] Enhanced Input Move/Look
+- [ ] Listen Server Session Create
+- [ ] Find / Join
+- [ ] Destroy
+- [ ] 6 Player Spawn
+- [ ] PlayerState 확인
+- [ ] CharacterMovement replication
+- [ ] First Person Camera
+- [ ] Remote Third Person Character
+- [ ] Big Star Station 검증
+- [ ] Character Asset 검증
+- [ ] Animation Starter Pack retarget
+- [ ] 2 Player 테스트 통과
+- [ ] 6 Player 테스트 통과
+- [ ] Join In Progress 테스트 통과
+- [ ] Host Exit 테스트 통과
+- [ ] Gameplay HUD 없음
+- [ ] Phase 01 Revolver 부착 지점 준비
+
+---
+
+# 13. 완료 후 기록
+
+## Result
+
+미작성.
+
+## Status
+
+Planned.
+
+## Commit
+
+미작성.
+
+## Implemented
+
+미작성.
+
+## Changed from Plan
+
+미작성.
+
+## Remaining
+
+미작성.
