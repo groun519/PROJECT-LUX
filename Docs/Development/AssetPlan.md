@@ -184,6 +184,8 @@ Phase 01 검증:
 - Control Rig
 - 포함 Revolver Mesh 품질
 - TP upper-body retarget 품질
+- 포함 총기 SFX 실제 존재 여부
+- Fire / Dry Fire / Hammer·Trigger / Cylinder Open·Close / Round Insert / Handling 커버 여부
 - Local owner FP visibility
 - Remote player FP arms 비노출
 
@@ -192,8 +194,16 @@ Phase 01 검증:
 - UE 5.8에서 문제가 없으면 기본 FP 리볼버 애니메이션 세트로 채택
 - TP 상체 재사용이 자연스러우면 별도 TP 리볼버 애니메이션은 구매하지 않음
 - 포함 Revolver Mesh가 부적합하면 애니메이션은 유지하고 Mesh만 교체
+- 트레일러에서 확인된 총기 사운드가 실제 배포 Content에 포함되어 있고 품질이 충분하면 Phase 01 기본 Revolver SFX로 채택
+- 사운드가 일부 부족한 경우 별도 SFX 팩 전체를 사기보다 부족한 항목만 보강
 
 현재 상태: **Owned / Phase 01 Validation**
+
+오디오 방향:
+
+- 트레일러에서 리볼버 사운드가 확인되었으므로 우선 R21 내부 SFX 사용을 전제로 한다.
+- 실제 SoundWave / SoundCue / MetaSound 포함 여부는 01-A에서 확인한다.
+- 확인 전에는 별도 리볼버 SFX 에셋을 구매하지 않는다.
 ---
 
 ## 1.5 총격 VFX - Muzzle Flash
