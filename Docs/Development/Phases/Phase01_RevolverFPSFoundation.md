@@ -79,6 +79,7 @@ Checkpoint 완료 보고 형식:
 - Aim / Fire 확인
 - Single Bullet Reload 확인
 - Character / Revolver Control Rig 확인
+- 포함 총기 SFX 확인
 - FP 카메라 배치 시험
 - TP 상체 재사용 가능성 빠른 확인
 
@@ -100,7 +101,10 @@ Checkpoint 완료 보고 형식:
 6. 포함 Revolver Mesh 2개의 최종 사용 가능성을 평가한다.
 7. 동일 상체 애니메이션을 Third-Person Character에 Retarget 또는 Preview하여 어깨/팔꿈치/손목 변형을 확인한다.
 8. TP가 충분하면 별도 TP 리볼버 애니메이션 구매 없이 진행한다고 기록한다.
-9. 문제가 있으면 Control Rig으로 보정 가능한 수준인지 기록한다.
+9. R21 Content에서 SoundWave / SoundCue / MetaSound 등 총기 관련 오디오 자산을 확인한다.
+10. 최소한 Fire / Dry Fire / Hammer 또는 Trigger / Cylinder Open / Cylinder Close / Round Insert / Handling 계열이 있는지 기록한다.
+11. 트레일러에서 들린 총기 사운드가 실제 배포 자산에 포함되어 있는지 확인한다.
+12. 문제가 있으면 Control Rig 또는 별도 보강이 필요한 수준인지 기록한다.
 
 ### 검수 기준
 
@@ -111,6 +115,8 @@ Checkpoint 완료 보고 형식:
 - Control Rig 접근 가능
 - 포함 Revolver Mesh의 채택/교체 판단 가능
 - TP 상체 재사용 가능성 판단 완료
+- 총기 관련 SFX의 실제 포함 여부 확인 완료
+- 포함 SFX로 Phase 01을 커버 가능한지 판단 완료
 
 ### 커밋 게이트
 
@@ -326,8 +332,9 @@ HUD 없이 실제 게임에서 사용할 1인칭 리볼버 조작 품질을 완�
 5. Server result와 Remote cosmetic event가 중복 재생되지 않게 한다.
 6. Reload / Cylinder 연출을 연결한다.
 7. Muzzle Flash 후보를 검증한다.
-8. Fire / Dry Fire / Cylinder / Load Round 사운드를 연결한다.
-9. Live / Blank / Rubber의 외부 발사 연출이 불필요하게 구분되지 않게 한다.
+8. 01-A에서 확인한 R21 포함 총기 SFX를 우선 사용해 Fire / Dry Fire / Cylinder / Load Round / Handling 사운드를 연결한다.
+9. R21 포함 SFX가 실제로 부족한 항목에 한해서만 별도 사운드 자산을 보강한다.
+10. Live / Blank / Rubber의 외부 발사 연출이 불필요하게 구분되지 않게 한다.
 
 ### 검수 기준
 
@@ -977,14 +984,25 @@ C++ state를 읽어 표현만 한다.
 
 # 12. Audio
 
+R21 트레일러에는 총기 사운드가 포함되어 있었으므로 **별도 리볼버 SFX 팩을 선구매하지 않는다.**
+
+다만 트레일러용 별도 후처리/오디오일 가능성은 배제할 수 없으므로, 01-A에서 실제 배포 Content 안의 오디오 자산을 확인한 뒤 확정한다.
+
 Phase 01에서 필요한 최소 범주:
 
 - Revolver Fire
 - Dry Fire
+- Hammer / Trigger 또는 이에 준하는 mechanical click
 - Cylinder Open
 - Cylinder Close
 - Load Round
 - Basic handling
+
+우선순위:
+
+1. R21 포함 SFX 사용
+2. 부족한 항목만 개별 보강
+3. R21 SFX가 전반적으로 부적합한 경우에만 별도 총기 SFX 팩 검토
 
 PROJECT LUX에서 Gunshot은 향후 Parasite perception 정보원이 되므로 다음을 고려한다.
 
