@@ -99,6 +99,58 @@ Checkpoint 완료 보고 형식:
 - Test Facility 저장 가능
 - Asset 경로와 Skeleton 정보가 보고됨
 
+### 실행 결과 - 2026-08-28 (Ready for Review)
+
+환경:
+
+- Unreal Engine 5.8.1에서 프로젝트 Open 및 D3D12 오프스크린 맵 로드 성공
+- C++ Target이 아직 없으므로 Development Editor 빌드는 해당 없음
+- Marketplace/Fab 원본은 로컬 전용 Content 경로를 유지하고 Git에서 제외
+- 프로젝트 소유 `.uasset` / `.umap`은 Git LFS 추적 대상으로 설정
+
+에셋 로드 결과:
+
+- Big Star Station: 400 Assets 확인, 142 Static Mesh 전부 로드 성공
+- Stylized Character Kit: Casual 01: 208 Assets 확인, Skeleton 1 / Skeletal Mesh 16 / Animation 8 로드 성공
+- Animation Starter Pack: 85 Assets 확인, Skeleton 1 / Skeletal Mesh 1 / Animation 62 로드 성공
+- 세 팩의 대상 에셋 로드 실패 0건, Editor 치명 오류 0건
+
+주요 경로:
+
+- Big Star Floor: `/Game/BigStarStation/StaticMesh/Building/SM_RoomStyle_Floor01`
+- Big Star Wall: `/Game/BigStarStation/StaticMesh/Building/SM_RoomStyle01_WallBig`
+- Big Star Ceiling: `/Game/BigStarStation/StaticMesh/Building/SM_CorridorRoof01`
+- Big Star Corridor Wall: `/Game/BigStarStation/StaticMesh/Building/SM_CorridorWall01`
+- Big Star Corridor Ceiling: `/Game/BigStarStation/StaticMesh/Building/SM_CorridorRoofSet01`
+- Big Star Corridor Light: `/Game/BigStarStation/StaticMesh/Building/SM_CorridorLight01`
+- Casual 01 Skeleton: `/Game/SCK_Casual01/Mannequin/Character/Mesh/UE4_Mannequin_Skeleton`
+- Casual 01 Character Mesh: `/Game/SCK_Casual01/Models/Premade_Characters/MESH_PC_00`
+- Casual 01 Animation Sample: `/Game/SCK_Casual01/Mannequin/Animations/ThirdPersonIdle`
+- Animation Starter Pack Skeleton: `/Game/AnimStarterPack/UE4_Mannequin/Mesh/UE4_Mannequin_Skeleton`
+- Animation Starter Pack Mesh: `/Game/AnimStarterPack/UE4_Mannequin/Mesh/SK_Mannequin`
+- Animation Starter Pack Animation Sample: `/Game/AnimStarterPack/Idle_Rifle_Hip`
+
+Skeleton / Retarget 결론:
+
+- 두 팩 모두 UE4 Mannequin 계열 Bone 이름과 표준 IK Chain을 포함한다.
+- 그러나 서로 다른 Skeleton Package에 바인딩되어 있으므로 동일 Skeleton으로 직접 공유할 수 없다.
+- Casual 01 Animation에는 IK Track이 포함되지만 Animation Starter Pack Animation Sample에는 IK Track이 없다.
+- Phase 00 Character에 적용할 때 UE5 IK Retargeter 또는 명시적 Skeleton Retarget 작업이 필요하다.
+
+Test Facility:
+
+- 저장 경로: `/Game/LUX/Maps/L_FPS_TestFacility`
+- 7.8 m 정사각 Spawn Room과 7.8 m Corridor를 Big Star 모듈로 구성
+- Static Mesh Actor 43개, Character Scale Reference 2개, Point Light 5개 배치
+- PlayerStart 6개를 두 줄로 배치하고 최소 중심 간격 260 cm 확인
+- 핵심 Floor / Wall / Corridor Wall의 Convex Collision Hull 존재 확인
+- 맵 저장 후 UE 5.8.1 D3D12 재로드, 에셋 참조, 액터 구성 검증 통과
+
+남은 수동 검증:
+
+- Character가 추가되는 00-C에서 PIE 보행 충돌과 카메라 기준 근거리 Scale 확인
+- 00-F에서 6 Player 실제 Spawn Overlap, Lumen 노출, GPU / CPU 부담 최종 확인
+
 ### 커밋 게이트
 
 검수 통과 후에만 커밋한다.
