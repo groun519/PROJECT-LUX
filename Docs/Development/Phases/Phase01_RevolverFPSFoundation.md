@@ -428,6 +428,8 @@ Phase 01 전체를 6인 멀티플레이 기준으로 검증한다.
 - Chamber secrecy
 - FP/TP presentation
 - 기본 latency simulation
+- 로컬 6인 검증
+- Steam 원격 2인 이상 실제 PC 검증
 - Phase 문서 결과 기록
 
 ### 작업 순서
@@ -444,8 +446,10 @@ Phase 01 전체를 6인 멀티플레이 기준으로 검증한다.
 10. 동시에 사격했을 때 Server 결과를 확인한다.
 11. 50ms / 100ms 지연에서 기본 Fire flow를 확인한다.
 12. FP/TP animation과 sound가 모든 관점에서 정상인지 확인한다.
-13. Completion Checklist를 갱신한다.
-14. Result / Changed from Plan / Remaining을 작성한다.
+13. Steam을 통해 최소 2대의 실제 PC 또는 동등한 원격 환경에서 동일 Fire / Reload / Death 흐름을 확인한다.
+14. 원격 환경에서 Host→Client, Client→Host 사격과 사망 복제를 확인한다.
+15. Completion Checklist를 갱신한다.
+16. Result / Changed from Plan / Remaining을 작성한다.
 
 ### 검수 기준
 
@@ -456,6 +460,7 @@ Phase 01 전체를 6인 멀티플레이 기준으로 검증한다.
 - FP arms owner-only
 - TP body 정상
 - HUD / Crosshair 없음
+- Steam 원격 2인 이상에서 리볼버 FPS 핵심 흐름 정상
 - 다음 Phase로 넘어갈 수 있는 상태
 
 ### Phase 완료 커밋
