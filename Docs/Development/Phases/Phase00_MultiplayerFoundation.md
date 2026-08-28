@@ -343,20 +343,27 @@ PROJECT LUX의 네트워크 토폴로지는 PROJECT-MA와 동일한 **Listen Ser
 - Steam Online Subsystem을 통한 실제 원격 접속 검증 경로
 - 최종 UI와 독립적인 Session Backend API
 
-### 최종 참여 UX는 이 Phase에서 확정하지 않는다
+### Lobby 방향은 정해졌지만 이 Phase에서 구현하지 않는다
 
-다음은 아직 TBD다.
+현재 확정된 방향:
+
+- 게임 시작 전 3D 실험 대기실 Lobby를 사용
+- 접수원 NPC에서 Steam Invite / Session 관련 기능에 접근
+- 문서 관리원 NPC에서 Room Settings 기능에 접근
+- NPC는 표현 계층이며 실제 상태는 Session / Room Settings 시스템이 소유
+- 상세 방향은 `Docs/Development/LobbyPlan.md` 참고
+
+아직 TBD:
 
 - Main Menu의 정확한 화면 구조
-- Host / Join 메뉴 구성
-- 방 코드 또는 Session Key 입력 방식 사용 여부
-- Steam Friend Invite 중심 방식 사용 여부
+- Host / Join 메뉴의 최종 구성
+- 방 코드 또는 Session Key 사용 여부
 - 공개 Session Browser 사용 여부
 - Quick Join 사용 여부
-- Lobby 화면의 최종 구조
-- Ready / 방 설정 UI
+- Ready 시스템 사용 여부
+- 실제 실험 시작 장치/상호작용 방식
 
-Phase 00-E는 어떤 UX가 선택되더라도 재사용 가능한 Session Backend까지만 만든다.
+Phase 00-E는 위 Lobby를 나중에 연결할 수 있는 UI 독립 Session Backend까지만 만든다.
 
 ### 하지 않는 것
 
