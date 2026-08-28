@@ -44,13 +44,35 @@ PROJECT LUX는 전통적인 게임 HUD를 사용하지 않는다.
 
 개발용 로그, 콘솔 출력, 비Shipping 디버그 시각화는 허용한다.
 
+
+## 0.4 네트워크 구조 원칙
+
+- PROJECT LUX는 PROJECT-MA와 동일하게 **Listen Server 구조**를 사용한다.
+- Online Session, Listen Travel, Client Travel, 서버 권한 Gameplay라는 기술적 방향을 공유한다.
+- PROJECT-MA의 현재 코드와 UI를 그대로 복사하는 것은 아니다.
+- 특히 Main Menu, Lobby UI, Session 참여 UX, Invite UX, 내부 Session 이름 정책은 PROJECT LUX에서 별도로 결정한다.
+- Phase 00에서는 최종 UI와 독립적인 Session Backend를 먼저 만든다.
+- 로컬 6인 검증과 별도로 Steam을 통한 실제 원격 2인 이상 검증을 첫 FPS Milestone의 완료 조건에 포함한다.
+
+### 아직 미확정인 Session UX
+
+- Main Menu 구조
+- Host / Join 화면
+- 방 코드 또는 Session Key 사용 여부
+- Steam Friend Invite 중심 여부
+- 공개 Session Browser 여부
+- Quick Join 여부
+- Lobby / Ready / Room Settings 화면 구조
+
+Codex는 위 항목을 임의로 결정하지 않는다.
+
 ---
 
 # 1. 첫 번째 개발 Milestone
 
 ## 목표
 
-**5~6명의 플레이어가 같은 Listen Server에 접속해 1인칭으로 이동하고, 리볼버를 사용해 서로 사격 및 사망 판정을 검증할 수 있는 상태.**
+**5~6명의 플레이어가 같은 Listen Server에 접속해 1인칭으로 이동하고, 리볼버를 사용해 서로 사격 및 사망 판정을 검증할 수 있는 상태. 로컬 6인 검증과 Steam 원격 2인 이상 검증을 모두 포함한다.**
 
 이 Milestone에서 PROJECT LUX의 기생물 시스템은 아직 구현하지 않는다.
 
