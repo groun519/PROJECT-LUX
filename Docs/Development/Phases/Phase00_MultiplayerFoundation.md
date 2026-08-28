@@ -328,6 +328,8 @@ feat: replicate player character and locomotion
 
 동일 Character 기반을 실제 Session 흐름으로 연결한다.
 
+PROJECT LUX의 네트워크 토폴로지는 PROJECT-MA와 동일한 **Listen Server 기반**을 사용한다. 다만 PROJECT-MA의 현재 메뉴, Lobby UI, Session 이름 사용 방식, Invite UX를 그대로 복사하지 않는다. 재사용하는 것은 Listen Server / Online Session의 기술적 패턴과 서버 권한 원칙이다.
+
 ### 범위
 
 - Create Session
@@ -338,6 +340,23 @@ feat: replicate player character and locomotion
 - Client Travel
 - ActiveSessionName 관리
 - 개발용 Console/Exec 진입점
+- Steam Online Subsystem을 통한 실제 원격 접속 검증 경로
+- 최종 UI와 독립적인 Session Backend API
+
+### 최종 참여 UX는 이 Phase에서 확정하지 않는다
+
+다음은 아직 TBD다.
+
+- Main Menu의 정확한 화면 구조
+- Host / Join 메뉴 구성
+- 방 코드 또는 Session Key 입력 방식 사용 여부
+- Steam Friend Invite 중심 방식 사용 여부
+- 공개 Session Browser 사용 여부
+- Quick Join 사용 여부
+- Lobby 화면의 최종 구조
+- Ready / 방 설정 UI
+
+Phase 00-E는 어떤 UX가 선택되더라도 재사용 가능한 Session Backend까지만 만든다.
 
 ### 하지 않는 것
 
@@ -357,7 +376,10 @@ feat: replicate player character and locomotion
 6. Destroy API를 구현한다.
 7. Host Listen Travel과 Client Travel을 연결한다.
 8. 개발용 호출 경로로 UI 없이 테스트 가능하게 한다.
-9. NULL/LAN 또는 현재 사용 가능한 Online Subsystem에서 검증한다.
+9. NULL/LAN 또는 현재 사용 가능한 Online Subsystem에서 기본 흐름을 검증한다.
+10. Steam Online Subsystem이 설정되어 있으면 동일 API로 Steam Session Create / Find / Join을 검증한다.
+11. 최소 2대의 실제 PC 또는 동등한 원격 환경에서 Host와 Client의 Steam 원격 접속을 확인한다.
+12. 최종 메뉴가 없어도 개발용 호출 경로로 원격 테스트가 가능해야 한다.
 
 ### 검수 기준
 
@@ -368,6 +390,9 @@ feat: replicate player character and locomotion
 - Destroy 성공
 - NAME_GameSession 하드코딩 의존 없음
 - Character/GameMode에 Session 로직이 섞이지 않음
+- Session Backend가 특정 Main Menu/Lobby UI에 종속되지 않음
+- Steam 원격 Host/Join이 개발용 경로에서 동작
+- 최종 참여 UX를 임의로 확정하지 않음
 
 ### 커밋 게이트
 
@@ -393,6 +418,8 @@ Phase 00 전체를 5~6인 실제 목표 규모에서 검증하고 닫는다.
 - Host Exit
 - PlayerState
 - Standalone / Multi-process
+- 로컬 6인 부하/복제 검증
+- Steam 원격 2인 이상 접속 검증
 - 최종 Phase 00 문서 결과 기록
 
 ### 작업 순서
@@ -405,8 +432,10 @@ Phase 00 전체를 5~6인 실제 목표 규모에서 검증하고 닫는다.
 6. Client Disconnect를 확인한다.
 7. Host 종료 시 Session/Client 정리를 확인한다.
 8. Standalone 환경에서 최소 Host/Join 흐름을 재검증한다.
-9. Phase 00 Completion Checklist를 갱신한다.
-10. Result / Changed from Plan / Remaining을 작성한다.
+9. Steam을 통해 최소 2대의 실제 PC 또는 동등한 원격 환경에서 Host/Join을 검증한다.
+10. 원격 Client에서 이동, Possess, PlayerState, Disconnect를 확인한다.
+11. Phase 00 Completion Checklist를 갱신한다.
+12. Result / Changed from Plan / Remaining을 작성한다.
 
 ### 검수 기준
 
@@ -418,6 +447,8 @@ Phase 00 전체를 5~6인 실제 목표 규모에서 검증하고 닫는다.
 - Client 이탈 후 치명 오류 없음
 - Host 종료 후 hanging 없음
 - Standalone에서 핵심 흐름 작동
+- Steam 원격 2인 이상 접속 성공
+- 최종 Main Menu/Lobby UX가 없어도 실제 인터넷 멀티 테스트 가능
 
 ### Phase 완료 커밋
 
