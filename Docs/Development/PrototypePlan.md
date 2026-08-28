@@ -54,15 +54,25 @@ PROJECT LUX는 전통적인 게임 HUD를 사용하지 않는다.
 - Phase 00에서는 최종 UI와 독립적인 Session Backend를 먼저 만든다.
 - 로컬 6인 검증과 별도로 Steam을 통한 실제 원격 2인 이상 검증을 첫 FPS Milestone의 완료 조건에 포함한다.
 
+### 현재 확정된 Lobby 방향
+
+- 게임 시작 전 **3D 실험 대기실 Lobby**를 사용한다.
+- Lobby에는 실제 플레이어 Character가 Spawn한다.
+- **접수원 NPC**는 Steam Invite / Session 관련 기능의 진입점이다.
+- **문서 관리원 NPC**는 Room Settings 기능의 진입점이다.
+- NPC는 표현 계층만 담당하며 실제 Session / Room Settings 상태는 C++ 시스템이 소유한다.
+- 상세 내용은 [LobbyPlan.md](LobbyPlan.md)를 따른다.
+
 ### 아직 미확정인 Session UX
 
-- Main Menu 구조
-- Host / Join 화면
+- Main Menu의 정확한 버튼 구성
+- Host / Join 화면의 최종 구조
 - 방 코드 또는 Session Key 사용 여부
-- Steam Friend Invite 중심 여부
 - 공개 Session Browser 여부
 - Quick Join 여부
-- Lobby / Ready / Room Settings 화면 구조
+- Steam Invite 외 추가 참가 방식
+- Ready 시스템 사용 여부
+- 실제 실험 시작 장치/상호작용 방식
 
 Codex는 위 항목을 임의로 결정하지 않는다.
 
