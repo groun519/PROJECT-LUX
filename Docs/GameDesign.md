@@ -1939,9 +1939,50 @@ PROJECT LUX는 플레이 중 화면 위에 지속적으로 정보를 표시하�
 17. 모든 기생물 사망 시 즉시 종료 기본값
 18. 관전자 이동/시점 규칙
 19. 외부 테스트용 정확한 한 판 목표 시간
-20. Main Menu / Lobby 최종 구조
-21. Session 참여 UX: 방 코드/Session Key, Steam Invite, Session Browser, Quick Join 중 어떤 방식을 사용할지
-22. Lobby Ready / Room Settings UI 구조
+20. Main Menu의 정확한 버튼 구성
+21. Session 참여 UX: 방 코드/Session Key, Session Browser, Quick Join 등 Steam Invite 외 추가 방식
+22. Lobby Ready 시스템 사용 여부
+23. 실험 시작을 어떤 NPC/단말기/출입문에서 수행할지
+24. Lobby Map의 정확한 레이아웃
+
+---
+
+# 45A. Lobby / 대기실 방향
+
+## 45A.1 3D 실험 대기실
+
+**[확정 방향]**
+
+게임 시작 전 Lobby는 단순한 목록 UI가 아니라 **실험 참가자들이 실제 Character로 모이는 3D 실험 대기실**로 구성한다.
+
+- 실험 시설의 접수/행정 공간이라는 세계관적 역할을 가진다.
+- 플레이어는 Lobby에서도 실제 Character로 이동한다.
+- Citizen / Host / Parasite 역할과 감염 정보는 Lobby에서 공개하지 않는다.
+- 실제 역할 배정 및 기생 관련 처리는 실험 시작 이후에 수행한다.
+
+## 45A.2 접수원 NPC
+
+**[확정 방향]**
+
+접수원 NPC는 Session / Invite 기능의 다이에제틱 진입점이다.
+
+- Steam 친구 초대 기능에 접근
+- 현재 Session 참가 관련 기능에 접근
+- 실제 Online Session 로직은 NPC가 아니라 Session Subsystem이 담당
+
+## 45A.3 문서 관리원 NPC
+
+**[확정 방향]**
+
+문서 관리원 NPC는 Room Settings 기능의 다이에제틱 진입점이다.
+
+- Host가 방 설정 UI에 접근
+- 기생물 수, 전력 ON 시간, 정전 시간 등 실험 조건 설정
+- 실제 Room Settings 상태는 서버 권한 시스템이 보관
+
+NPC는 기능의 표현/접근 계층이며 Session 또는 게임 규칙의 truth를 직접 소유하지 않는다.
+
+세부 구현 방향은 `Docs/Development/LobbyPlan.md`를 따른다.
 
 ---
 
