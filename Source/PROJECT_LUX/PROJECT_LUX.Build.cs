@@ -12,5 +12,10 @@ public class PROJECT_LUX : ModuleRules
 			"CoreUObject",
 			"Engine"
 		});
+
+		PrivateDependencyModuleNames.AddRange(new[]
+		{
+			"EnhancedInput"
+		});
 	}
 }

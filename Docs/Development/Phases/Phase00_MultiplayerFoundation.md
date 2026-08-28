@@ -293,6 +293,48 @@ feat: add multiplayer framework skeleton
 - Jump/Crouch/Sprint가 임의 추가되지 않음
 - 시설 스케일이 1인칭에서 자연스러움
 
+### 실행 결과 - 2026-08-28 (Ready for Review)
+
+Character / Camera:
+
+- `ALuxCharacter`에 `UCameraComponent` 기반 `FirstPersonCamera` 구성
+- Capsule 반경 34 cm / 반높이 96 cm, Camera 상대 Z 64 cm로 바닥 기준 눈높이 160 cm 적용
+- Camera는 Pawn Control Rotation을 사용하고 Character는 Controller Yaw를 따르도록 구성
+- 이동 방향은 Controller Yaw 기준 Forward / Right로 계산하며 별도 Tick은 사용하지 않음
+
+Enhanced Input:
+
+- `EnhancedInput`을 Runtime Module의 Private Dependency로 추가
+- 프로젝트 소유 Input Asset을 `/Game/LUX/Input`에 생성
+  - `IA_Move`: Axis2D
+  - `IA_Look`: Axis2D
+  - `IMC_Player`: W / A / S / D / Mouse2D
+- W / S는 Y축 Forward, A / D는 X축 Right로 구성
+- Mouse2D는 Y축만 반전해 일반적인 마우스 상하 시점 방향으로 구성
+- `PawnClientRestart`에서 기존 Context를 제거한 뒤 Priority 0으로 다시 등록해 재시작 경로의 중복 등록 방지
+- `SetupPlayerInputComponent`에서 Move / Look의 `Triggered` 이벤트만 연결
+
+Test Facility:
+
+- `/Game/LUX/Maps/L_FPS_TestFacility` 단일 플레이어 PIE 검증
+- 00-A의 스케일 참고용 Casual Mesh는 외부 원본을 변경하지 않고 참고 Actor의 불필요한 Shadow만 비활성화해 Map Check 경고 제거
+- 160 cm 눈높이의 1인칭 캡처에서 복도 폭, 벽체, 천장 및 성인형 Scale Reference가 자연스러운 비율임을 확인
+- Gameplay HUD와 Crosshair가 표시되지 않음을 확인
+
+검증:
+
+- `PROJECT_LUXEditor Win64 Development` UHT / Compile / Link 성공
+- `ALuxCharacter`, Camera, Capsule, Input Asset 참조와 Modifier 구성을 자동 검증
+- `L_FPS_TestFacility` 로드 성공, PlayerStart 6개 확인, Map Check 0 Error / 0 Warning
+- 단일 플레이어 PIE에서 `ALuxPlayerController`가 `ALuxCharacter`를 Possess함을 확인
+- Runtime 활성 Key가 Move W/A/S/D, Look Mouse2D 각각 1세트만 존재함을 확인
+- 입력 주입 Smoke Test에서 수평 이동 63.07 cm, Yaw 35.625도, Pitch 11.875도 변화 확인
+- Jump / Crouch / Sprint / HUD / Crosshair / Weapon / Session 구현 없음 확인
+
+남은 사항:
+
+- 시설 조명과 노출의 최종 품질 및 부하는 00-F 통합 QA에서 확인
+
 ### 커밋 게이트
 
 권장 커밋 메시지:
