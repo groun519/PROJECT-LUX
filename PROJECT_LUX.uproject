@@ -3,6 +3,13 @@
 	"EngineAssociation": "5.8",
 	"Category": "",
 	"Description": "PROJECT LUX",
+	"Modules": [
+		{
+			"Name": "PROJECT_LUX",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
 	"Plugins": [
 		{
 			"Name": "EnhancedInput",

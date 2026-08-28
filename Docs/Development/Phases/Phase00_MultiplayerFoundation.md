@@ -205,6 +205,39 @@ chore: validate phase 00 assets and test facility
 - 서로 불필요하게 참조하지 않음
 - Phase 00 범위를 벗어난 게임 규칙 없음
 
+### 실행 결과 - 2026-08-28 (Ready for Review)
+
+C++ Module / Target:
+
+- `PROJECT_LUX` Runtime Module 생성
+- `PROJECT_LUX` Game Target과 `PROJECT_LUXEditor` Editor Target 생성
+- UE 5.8 기준 `BuildSettingsVersion.V7`, `EngineIncludeOrderVersion.Unreal5_8` 적용
+- 현재 필요한 `Core`, `CoreUObject`, `Engine`만 Public Dependency로 구성
+
+Framework:
+
+- `ULuxGameInstance`: 기본 GameInstance 뼈대
+- `ULuxSessionSubsystem`: API 없는 GameInstanceSubsystem 뼈대
+- `ALuxGameMode`: 기본 Pawn / Controller / PlayerState / GameState Class 연결
+- `ALuxGameState`: 상태 필드 없는 GameStateBase 뼈대
+- `ALuxPlayerController`: 입력 코드 없는 PlayerController 뼈대
+- `ALuxPlayerState`: 게임 상태 필드 없는 PlayerState 뼈대
+- `ALuxCharacter`: Camera / Input 없이 ACharacter 기반만 준비
+
+기본 설정:
+
+- `GameInstanceClass=/Script/PROJECT_LUX.LuxGameInstance`
+- `GlobalDefaultGameMode=/Script/PROJECT_LUX.LuxGameMode`
+- `ALuxGameMode`의 기본 Class를 `ALuxCharacter`, `ALuxPlayerController`, `ALuxPlayerState`, `ALuxGameState`로 연결
+
+검증:
+
+- `PROJECT_LUXEditor Win64 Development` UHT / Compile / Link 성공
+- Unreal Engine 5.8.1 D3D12 Editor에서 `UnrealEditor-PROJECT_LUX.dll` 로드 성공
+- 네이티브 Class 7개 로드 및 GameMode 기본 Class 연결 자동 검증 통과
+- `/Game/LUX/Maps/L_FPS_TestFacility` 재로드 및 Map Check 0 Error / 0 Warning
+- Session / Move / Look / Camera / Weapon / Damage / Round / Role 구현 없음 확인
+
 ### 커밋 게이트
 
 권장 커밋 메시지:
