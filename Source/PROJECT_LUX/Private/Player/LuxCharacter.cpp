@@ -2,8 +2,11 @@
 
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Animation/AnimInstance.h"
+#include "Engine/SkeletalMesh.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "InputAction.h"
@@ -20,6 +23,12 @@ ALuxCharacter::ALuxCharacter()
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCapsuleComponent()->InitCapsuleSize(34.0f, 96.0f);
 
+	USkeletalMeshComponent* ThirdPersonMesh = GetMesh();
+	ThirdPersonMesh->SetRelativeLocationAndRotation(FVector(0.0, 0.0, -96.0), FRotator(0.0, -90.0, 0.0));
+	ThirdPersonMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ThirdPersonMesh->SetGenerateOverlapEvents(false);
+	ThirdPersonMesh->SetOwnerNoSee(true);
+
 	FirstPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	FirstPersonCamera->SetupAttachment(GetCapsuleComponent());
 	FirstPersonCamera->SetRelativeLocation(FVector(0.0, 0.0, 64.0));
@@ -31,10 +40,22 @@ ALuxCharacter::ALuxCharacter()
 		TEXT("/Game/LUX/Input/IA_Move.IA_Move"));
 	static ConstructorHelpers::FObjectFinder<UInputAction> LookActionFinder(
 		TEXT("/Game/LUX/Input/IA_Look.IA_Look"));
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> ThirdPersonMeshFinder(
+		TEXT("/Game/SCK_Casual01/Models/Premade_Characters/MESH_PC_00.MESH_PC_00"));
+	static ConstructorHelpers::FClassFinder<UAnimInstance> ThirdPersonAnimClassFinder(
+		TEXT("/Game/LUX/Animation/Locomotion/ABP_LuxCharacter"));
 
 	PlayerMappingContext = MappingContextFinder.Object;
 	MoveAction = MoveActionFinder.Object;
 	LookAction = LookActionFinder.Object;
+	if (ThirdPersonMeshFinder.Succeeded())
+	{
+		ThirdPersonMesh->SetSkeletalMeshAsset(ThirdPersonMeshFinder.Object);
+	}
+	if (ThirdPersonAnimClassFinder.Succeeded())
+	{
+		ThirdPersonMesh->SetAnimInstanceClass(ThirdPersonAnimClassFinder.Class);
+	}
 }
 
 void ALuxCharacter::PawnClientRestart()

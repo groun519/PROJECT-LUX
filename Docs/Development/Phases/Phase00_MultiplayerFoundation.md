@@ -387,6 +387,46 @@ feat: add first person movement foundation
 - Local owner 표시 정책이 의도대로 동작
 - Animation BP가 Gameplay truth를 소유하지 않음
 
+### 실행 결과 - 2026-08-28 (Ready for Review)
+
+Character / Visibility:
+
+- `ACharacter`가 기본 제공하는 `CharacterMovement` 복제를 그대로 사용하고 별도 Transform RPC나 복제 필드를 추가하지 않음
+- 상속된 Character Mesh에 Casual 01 `MESH_PC_00`을 연결하고 Capsule 기준 위치/회전을 보정
+- Third-Person Mesh의 Collision/Overlap을 비활성화해 Capsule 이동과 Gameplay Collision에 관여하지 않도록 구성
+- Local Owner에서는 `OwnerNoSee`, 다른 플레이어에게는 전신 Mesh가 보이는 표시 정책 적용
+
+Retarget / Locomotion:
+
+- Animation Starter Pack과 Casual 01용 IK Rig 및 Retargeter를 `/Game/LUX/Animation/Retarget`에 생성
+- Idle, Forward/Backward/Left/Right Jog 5종을 Casual 01 Skeleton으로 Retarget
+- Direction -180~180 / Speed 0~600 기반 2D BlendSpace와 최소 `ABP_LuxCharacter`를 `/Game/LUX/Animation/Locomotion`에 생성
+- `ULuxCharacterAnimInstance`는 Pawn의 복제된 Velocity에서 표현용 Speed/Direction만 계산하며 Gameplay truth를 소유하지 않음
+
+2 Player PIE:
+
+- Listen Server 1 + Client 1, 동일 프로세스의 PIE World 2개 생성 확인
+- 각 World에서 `ALuxCharacter` 2개, Casual 01 Mesh, 프로젝트 AnimBP, `OwnerNoSee` 정책 확인
+- Host/Client 양쪽 입력 주입 후 Local Character와 반대 World의 Remote Proxy 이동을 동시 추적
+- Host 604.09 cm / Client 74.13 cm 이동 및 양쪽 Remote Proxy 50 cm 이상 복제 확인
+- 이동 중 Remote Proxy 최대 추적 오차 11.87 cm, 최대 단일 이동 Step 16.91 cm
+- Remote 경로/직선 이동 비율 Host 1.005 / Client 1.002로 심각한 backtracking 또는 jitter 없음
+- 입력 정지 후 Remote Proxy 최종 오차 Host 0.005 cm / Client 0.001 cm 미만으로 수렴
+- Remote AnimInstance에서 Host Forward 600 cm/s, 0도 / Client Lateral 502.14 cm/s, 90도 확인
+- Big Star Station Test Facility에서 Remote Casual 01 전신과 Retarget Pose가 정상 표시되는 캡처 확인
+
+검증:
+
+- `PROJECT_LUXEditor Win64 Development` UHT / Compile / Link 성공
+- 프로젝트 소유 Animation Asset 10개 로드 및 Skeleton/Graph/Pin/Sample 자동 검증 통과
+- `/Game/LUX/Maps/L_FPS_TestFacility` 로드 성공, PlayerStart 6개 확인, Map Check 0 Error / 0 Warning
+- Revolver, 상체 Layer, Head IK, Session UI 및 자체 Transform RPC가 추가되지 않음
+
+남은 사항:
+
+- 실제 Steam 원격 환경의 Character 복제는 00-E Session Flow 이후 검증
+- 6인 Spawn/부하/복제 검증은 00-F에서 수행
+
 ### 커밋 게이트
 
 권장 커밋 메시지:
