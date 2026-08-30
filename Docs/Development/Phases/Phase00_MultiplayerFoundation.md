@@ -516,6 +516,50 @@ Phase 00-E는 위 Lobby를 나중에 연결할 수 있는 UI 독립 Session Back
 - Steam 원격 Host/Join이 개발용 경로에서 동작
 - 최종 참여 UX를 임의로 확정하지 않음
 
+### 실행 결과 - 2026-08-30 (Local Validation Complete / Steam Remote Deferred)
+
+Session Backend:
+
+- `ULuxSessionSubsystem`이 현재 World의 Online Subsystem과 Session Interface를 소유하도록 구현
+- Create / Find / 특정 Search Result Join / Destroy를 비동기 완료 Delegate와 함께 Blueprint 호출 가능 API로 제공
+- 검색 결과는 Session ID, Host 이름, Ping, 현재/최대 인원, LAN 여부만 담은 프로젝트용 `FLuxSessionSearchResult`로 노출
+- 각 Create/Join 요청에서 `LuxSession_<runtime GUID>` 형식의 로컬 Session 이름을 생성하고 `NAME_GameSession`에 의존하지 않음
+- 기존 Active Session이 있으면 Destroy 완료 후 대기 중인 Create/Join을 이어가도록 Session 수명 순서를 보장
+- Host는 Create 성공 후 지정 Map에 `?listen` Server Travel, Client는 Join 성공 후 Resolve된 주소로 Client Travel
+- LAN과 Online 설정이 동일 API를 사용하며 Online 모드에서는 Presence/Lobby 기반 Session 설정 사용
+- GameInstance Subsystem 종료 시 남은 Delegate를 해제하고 Active Session 정리를 요청
+
+UI 독립 진입점:
+
+- `LuxSessionCreate <MaxPlayers> <bIsLAN> <ListenMapPath>`
+- `LuxSessionFind <MaxSearchResults> <bIsLAN>`
+- `LuxSessionJoin <SearchResultIndex>`
+- `LuxSessionDestroy`
+- `LuxSessionStatus`
+- `LuxSessionFindAndJoin <bIsLAN>`은 자동 검증을 위한 개발 편의 명령이며 최종 Quick Join UX를 확정하지 않음
+
+NULL / LAN 실제 프로세스 검증:
+
+- 서로 다른 Standalone Game Process에서 Host와 Client를 실행하고 Online Subsystem `NULL` 초기화 확인
+- Host가 2 Public Connection Session 생성 후 `/Game/LUX/Maps/L_FPS_TestFacility?listen` Travel 및 Port Listen 성공
+- Client 검색에서 LUX Marker Session 1개 발견, 특정 Result Join 성공, Resolve 주소로 Client Travel 성공
+- Server의 Login / Join 수락 및 Client의 Test Facility Load 완료 확인
+- Host World에서 `LuxCharacter` 2개와 각기 다른 Pawn을 Possess한 `LuxPlayerController` 2개 확인
+- Client World에서 `LuxCharacter` 2개와 Local Controller의 Pawn Possess 확인
+- 별도 수명 테스트에서 Create 후 `LuxSessionDestroy` 실행 및 Destroy 완료 Delegate 성공 확인
+
+검증:
+
+- `PROJECT_LUXEditor Win64 Development` UHT / Compile / Link 성공
+- Session 코드는 `ULuxSessionSubsystem`에 한정하고 Character / GameMode에 Session 로직이 추가되지 않음
+- Lobby UI, Matchmaking UI, Room Settings, Ready, Role, Invite UX를 구현하거나 확정하지 않음
+
+후속 외부 검증:
+
+- 현재 기본 Backend는 `DefaultPlatformService=Null`, Steam은 비활성 상태이므로 실제 Steam Host/Find/Join은 실행하지 않음
+- 실제 App ID와 서로 다른 Steam 계정/PC가 준비되면 Steam Online Subsystem과 Steam NetDriver를 검증 설정에서 활성화한 뒤 위 동일 Console API로 원격 2인 테스트 필요
+- 2026-08-30 결정에 따라 Steam 원격 검증은 후속 통합 검증으로 이관하고, NULL/LAN 로컬 검증 결과를 기준으로 00-E 구현 체크포인트를 승인함
+
 ### 커밋 게이트
 
 권장 커밋 메시지:

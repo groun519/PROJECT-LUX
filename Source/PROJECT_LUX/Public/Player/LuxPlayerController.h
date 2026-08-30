@@ -8,4 +8,33 @@ UCLASS()
 class PROJECT_LUX_API ALuxPlayerController : public APlayerController
 {
 	GENERATED_BODY()
+
+public:
+	UFUNCTION(Exec)
+	void LuxSessionCreate(
+		int32 MaxPlayers = 6,
+		bool bIsLAN = true,
+		FString ListenMapPath = TEXT("/Game/LUX/Maps/L_FPS_TestFacility")
+	);
+
+	UFUNCTION(Exec)
+	void LuxSessionFind(int32 MaxSearchResults = 50, bool bIsLAN = true);
+
+	UFUNCTION(Exec)
+	void LuxSessionJoin(int32 SearchResultIndex = 0);
+
+	UFUNCTION(Exec)
+	void LuxSessionFindAndJoin(bool bIsLAN = true);
+
+	UFUNCTION(Exec)
+	void LuxSessionDestroy();
+
+	UFUNCTION(Exec)
+	void LuxSessionStatus();
+
+private:
+	UFUNCTION()
+	void HandleDevelopmentFindSessionsComplete(bool bWasSuccessful, int32 ResultCount);
+
+	bool bDevelopmentJoinFirstResult = false;
 };
