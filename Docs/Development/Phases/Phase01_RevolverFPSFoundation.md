@@ -118,6 +118,16 @@ Checkpoint 완료 보고 형식:
 - 총기 관련 SFX의 실제 포함 여부 확인 완료
 - 포함 SFX로 Phase 01을 커버 가능한지 판단 완료
 
+### 실행 결과 - 2026-08-31
+
+- UE 5.8 자동 로드 통과: `/Game/RevolverFPGM` 아래 183개 Asset 확인
+- FP Arms와 Aim / Fire / Single Bullet Reload가 동일 `SK_Mannequin_Arms_Skeleton` 사용
+- `MCR_Base`, `MCR_Revolver` Control Rig 로드 확인
+- `SKM_Revolver_base`, `SKM_Revolver_NoClip` 모두 로드되며 Single Bullet 방식에는 `NoClip`을 우선 후보로 채택
+- SoundCue 20개, SoundWave 21개 확인: Fire / Trigger(Dry Fire 후보) / Cylinder / Round Insert / Equip·Inspect 범주 커버
+- TP는 Casual01에 직접 연결하지 않고 IK Retarget + Upper Body Layer가 필요하며, 별도 TP 애니메이션은 우선 구매하지 않음
+- 판정: **R21 채택 / 01-B 진행 가능**
+
 ### 커밋 게이트
 
 연결용 프로젝트 Asset을 생성/수정한 경우 검수 후 커밋한다.
@@ -1144,8 +1154,8 @@ Live / Blank / Rubber / Empty / Live / Blank
 ## Asset
 
 - [x] R21 Personal 라이선스 구매 완료
-- [ ] R21 UE 5.8 import
-- [ ] Revolver mesh 검증
+- [x] R21 UE 5.8 import
+- [x] Revolver mesh 검증
 - [ ] FP animations 연결
 - [ ] TP animations 연결
 - [ ] lower-body layer 연결

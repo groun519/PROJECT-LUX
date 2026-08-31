@@ -219,7 +219,7 @@ Phase 01 검증:
 - 트레일러에서 확인된 총기 사운드가 실제 배포 Content에 포함되어 있고 품질이 충분하면 Phase 01 기본 Revolver SFX로 채택
 - 사운드가 일부 부족한 경우 별도 SFX 팩 전체를 사기보다 부족한 항목만 보강
 
-현재 상태: **Owned / Phase 01 Validation**
+현재 상태: **Adopt / Phase 01-A Validated**
 
 오디오 방향:
 
