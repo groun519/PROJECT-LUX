@@ -25,6 +25,7 @@ ALuxCharacter::ALuxCharacter()
 	bUseControllerRotationRoll = false;
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCapsuleComponent()->InitCapsuleSize(34.0f, 96.0f);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
 	USkeletalMeshComponent* ThirdPersonMesh = GetMesh();
 	ThirdPersonMesh->SetRelativeLocationAndRotation(FVector(0.0, 0.0, -96.0), FRotator(0.0, -90.0, 0.0));
@@ -46,6 +47,8 @@ ALuxCharacter::ALuxCharacter()
 		TEXT("/Game/LUX/Input/IA_Move.IA_Move"));
 	static ConstructorHelpers::FObjectFinder<UInputAction> LookActionFinder(
 		TEXT("/Game/LUX/Input/IA_Look.IA_Look"));
+	static ConstructorHelpers::FObjectFinder<UInputAction> FireActionFinder(
+		TEXT("/Game/LUX/Input/IA_Fire.IA_Fire"));
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> ThirdPersonMeshFinder(
 		TEXT("/Game/SCK_Casual01/Models/Premade_Characters/MESH_PC_00.MESH_PC_00"));
 	static ConstructorHelpers::FClassFinder<UAnimInstance> ThirdPersonAnimClassFinder(
@@ -54,6 +57,7 @@ ALuxCharacter::ALuxCharacter()
 	PlayerMappingContext = MappingContextFinder.Object;
 	MoveAction = MoveActionFinder.Object;
 	LookAction = LookActionFinder.Object;
+	FireAction = FireActionFinder.Object;
 	if (ThirdPersonMeshFinder.Succeeded())
 	{
 		ThirdPersonMesh->SetSkeletalMeshAsset(ThirdPersonMeshFinder.Object);
@@ -90,6 +94,7 @@ void ALuxCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ALuxCharacter, EquippedRevolver);
+	DOREPLIFETIME(ALuxCharacter, bIsDead);
 }
 
 ALuxRevolver* ALuxCharacter::GetEquippedRevolver() const
@@ -97,9 +102,42 @@ ALuxRevolver* ALuxCharacter::GetEquippedRevolver() const
 	return EquippedRevolver;
 }
 
+bool ALuxCharacter::IsDead() const
+{
+	return bIsDead;
+}
+
+bool ALuxCharacter::Die()
+{
+	if (!HasAuthority() || bIsDead)
+	{
+		return false;
+	}
+
+	bIsDead = true;
+	ApplyDeathState();
+	ForceNetUpdate();
+	return true;
+}
+
 void ALuxCharacter::OnRep_EquippedRevolver()
 {
 	AttachEquippedRevolver();
+}
+
+void ALuxCharacter::OnRep_IsDead()
+{
+	if (bIsDead)
+	{
+		ApplyDeathState();
+	}
+}
+
+void ALuxCharacter::ApplyDeathState()
+{
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
 void ALuxCharacter::AttachEquippedRevolver()
@@ -163,6 +201,18 @@ void ALuxCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	if (LookAction)
 	{
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ALuxCharacter::Look);
+	}
+	if (FireAction)
+	{
+		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &ALuxCharacter::Fire);
+	}
+}
+
+void ALuxCharacter::Fire(const FInputActionValue& Value)
+{
+	if (!bIsDead && Value.Get<bool>() && EquippedRevolver)
+	{
+		EquippedRevolver->RequestFire();
 	}
 }
 

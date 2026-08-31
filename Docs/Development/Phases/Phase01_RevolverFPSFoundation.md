@@ -1,6 +1,6 @@
 # Phase 01 - Revolver FPS Foundation
 
-> 상태: In Progress - 01-B Ready for Review
+> 상태: In Progress - 01-C Ready for Review
 > 선행 Phase: Phase 00 - Multiplayer Foundation  
 > 목표: PROJECT LUX의 유일한 기본 총기인 리볼버를 서버 권한 멀티플레이 구조로 구현하고, 실탄/공탄/고무탄의 숨겨진 탄종 구조와 즉사 규칙까지 검증한다.
 
@@ -256,6 +256,19 @@ feat: add replicated revolver chamber state
 - 모든 Chamber 소비/진행이 Server authoritative
 - Dead player fire 차단
 - 다른 Client에서도 사망 상태 동일
+
+### 실행 결과 - 2026-08-31 (Ready for Review)
+
+- Boolean `IA_Fire`를 `LeftMouseButton`으로 `IMC_Player`에 추가하고 Character 입력에 연결
+- Client는 인자 없는 `ServerFire` RPC만 요청하며 Server Pawn 시점에서 100 m Visibility Trace 수행
+- 장착 상태, 생존 상태, Cylinder Closed, Chamber Index, 0.25초 최소 Fire Interval을 Server에서 검증
+- Live는 적중 Character의 `Die()` 호출, Blank는 Trace 없이 소비, Rubber는 비살상 Hit Event, Empty는 Dry Fire Event 처리
+- Live / Blank / Rubber는 동일한 공개 `FireSequence`만 복제하고 정확한 탄종 결과는 Server-only 유지
+- `bIsDead` 복제와 이동 중지, Capsule Collision 해제, 사망 후 Fire 차단 구현
+- 3 Player PIE에서 Host→Client, Client→Host, Client A→Client B Live 즉사와 모든 World의 사망 상태 일치 확인
+- Host→Client 흐름에서 Blank 비살상, Rubber 적중·비살상, Empty Dry Fire, 즉시 재발사 거부 확인
+- Empty의 약실 진행 규칙은 문서상 미결정이므로 이번 Checkpoint에서는 Index를 유지
+- 판정: **01-C 검수 기준 통과 / 01-D 진행 가능**
 
 ### 커밋 게이트
 
@@ -1148,15 +1161,15 @@ Live / Blank / Rubber / Empty / Live / Blank
 - [x] RoundType non-replication
 - [x] LoadedMask replication
 - [x] Current chamber state
-- [ ] ServerFire
-- [ ] Hitscan
-- [ ] Live lethal
-- [ ] Blank non-lethal/no trace
-- [ ] Rubber non-lethal hit event
-- [ ] Dry Fire
-- [ ] bIsDead
-- [ ] Death replication
-- [ ] Dead player fire blocked
+- [x] ServerFire
+- [x] Hitscan
+- [x] Live lethal
+- [x] Blank non-lethal/no trace
+- [x] Rubber non-lethal hit event
+- [x] Dry Fire
+- [x] bIsDead
+- [x] Death replication
+- [x] Dead player fire blocked
 - [ ] Aim input
 - [ ] No crosshair
 - [ ] Debug round insertion driver
@@ -1177,13 +1190,13 @@ Live / Blank / Rubber / Empty / Live / Blank
 
 ## Multiplayer
 
-- [ ] Host → Client Live kill
-- [ ] Client → Host Live kill
-- [ ] Client → Client Live kill
-- [ ] Blank 검증
-- [ ] Rubber 검증
-- [ ] Dry Fire 검증
-- [ ] Chamber secrecy 검증
+- [x] Host → Client Live kill
+- [x] Client → Host Live kill
+- [x] Client → Client Live kill
+- [x] Blank 검증
+- [x] Rubber 검증
+- [x] Dry Fire 검증
+- [x] Chamber secrecy 검증
 - [ ] 6 Player 테스트
 - [ ] HUD 없음
 

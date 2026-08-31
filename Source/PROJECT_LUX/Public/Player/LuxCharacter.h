@@ -28,11 +28,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Revolver")
 	ALuxRevolver* GetEquippedRevolver() const;
 
+	UFUNCTION(BlueprintPure, Category = "State")
+	bool IsDead() const;
+
+	bool Die();
+
 private:
 	UFUNCTION()
 	void OnRep_EquippedRevolver();
 
+	UFUNCTION()
+	void OnRep_IsDead();
+
+	void ApplyDeathState();
 	void AttachEquippedRevolver();
+	void Fire(const FInputActionValue& Value);
 	void SpawnDefaultRevolver();
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
@@ -46,6 +56,9 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_EquippedRevolver, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<ALuxRevolver> EquippedRevolver;
 
+	UPROPERTY(ReplicatedUsing = OnRep_IsDead, VisibleInstanceOnly, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
+	bool bIsDead = false;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputMappingContext> PlayerMappingContext;
 
@@ -54,4 +67,7 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputAction> LookAction;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	TObjectPtr<UInputAction> FireAction;
 };
