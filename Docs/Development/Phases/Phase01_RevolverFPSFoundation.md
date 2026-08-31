@@ -1,6 +1,6 @@
 # Phase 01 - Revolver FPS Foundation
 
-> 상태: Planned  
+> 상태: In Progress - 01-B Ready for Review
 > 선행 Phase: Phase 00 - Multiplayer Foundation  
 > 목표: PROJECT LUX의 유일한 기본 총기인 리볼버를 서버 권한 멀티플레이 구조로 구현하고, 실탄/공탄/고무탄의 숨겨진 탄종 구조와 즉사 규칙까지 검증한다.
 
@@ -185,6 +185,17 @@ chore: validate R21 revolver animation integration
 - Live / Blank / Rubber 정보가 Remote Client에 노출되지 않음
 - Loaded / Empty만 필요한 범위에서 확인 가능
 - 총 상태가 Character가 아니라 Revolver Actor에 남음
+
+### 실행 결과 - 2026-08-31 (Ready for Review)
+
+- `ELuxRevolverRoundType`과 Replicated `ALuxRevolver` 구현
+- 정확한 6 Chamber 배열은 Server-only `TStaticArray`로 유지하고 복제 목록에서 제외
+- `LoadedMask`, `CurrentChamberIndex`, `bCylinderOpen`만 공개 상태로 복제
+- Server Character가 기본 Revolver를 생성하고 Owner / Instigator / Attach / `EquippedRevolver` 참조를 권위 있게 설정
+- 2 Player Listen Server에서 World별 Character 2개와 Revolver 2개, 장착 소유권과 Attach 확인
+- Server `Live / Blank / Rubber / Empty / Live / Blank` 설정 시 Host와 Client가 동일한 `LoadedMask=55`, Chamber Index 4, Cylinder Open 상태를 확인
+- Remote Client의 정확한 Chamber 조회는 `AuthorityOnly`, Chamber 변조 요청은 거부됨
+- 판정: **01-B 검수 기준 통과 / 01-C 진행 가능**
 
 ### 커밋 게이트
 
@@ -1131,12 +1142,12 @@ Live / Blank / Rubber / Empty / Live / Blank
 
 ## Code
 
-- [ ] ELuxRevolverRoundType
-- [ ] ALuxRevolver replicated actor
-- [ ] 6 Chamber server state
-- [ ] RoundType non-replication
-- [ ] LoadedMask replication
-- [ ] Current chamber state
+- [x] ELuxRevolverRoundType
+- [x] ALuxRevolver replicated actor
+- [x] 6 Chamber server state
+- [x] RoundType non-replication
+- [x] LoadedMask replication
+- [x] Current chamber state
 - [ ] ServerFire
 - [ ] Hitscan
 - [ ] Live lethal

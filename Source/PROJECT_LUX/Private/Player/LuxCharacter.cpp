@@ -2,6 +2,7 @@
 
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -12,7 +13,9 @@
 #include "InputAction.h"
 #include "InputActionValue.h"
 #include "InputMappingContext.h"
+#include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Weapons/LuxRevolver.h"
 
 ALuxCharacter::ALuxCharacter()
 {
@@ -33,6 +36,9 @@ ALuxCharacter::ALuxCharacter()
 	FirstPersonCamera->SetupAttachment(GetCapsuleComponent());
 	FirstPersonCamera->SetRelativeLocation(FVector(0.0, 0.0, 64.0));
 	FirstPersonCamera->bUsePawnControlRotation = true;
+
+	RevolverAttachPoint = CreateDefaultSubobject<USceneComponent>(TEXT("RevolverAttachPoint"));
+	RevolverAttachPoint->SetupAttachment(GetCapsuleComponent());
 
 	static ConstructorHelpers::FObjectFinder<UInputMappingContext> MappingContextFinder(
 		TEXT("/Game/LUX/Input/IMC_Player.IMC_Player"));
@@ -56,6 +62,76 @@ ALuxCharacter::ALuxCharacter()
 	{
 		ThirdPersonMesh->SetAnimInstanceClass(ThirdPersonAnimClassFinder.Class);
 	}
+}
+
+void ALuxCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (HasAuthority())
+	{
+		SpawnDefaultRevolver();
+	}
+}
+
+void ALuxCharacter::Destroyed()
+{
+	if (HasAuthority() && IsValid(EquippedRevolver))
+	{
+		EquippedRevolver->Destroy();
+		EquippedRevolver = nullptr;
+	}
+
+	Super::Destroyed();
+}
+
+void ALuxCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ALuxCharacter, EquippedRevolver);
+}
+
+ALuxRevolver* ALuxCharacter::GetEquippedRevolver() const
+{
+	return EquippedRevolver;
+}
+
+void ALuxCharacter::OnRep_EquippedRevolver()
+{
+	AttachEquippedRevolver();
+}
+
+void ALuxCharacter::AttachEquippedRevolver()
+{
+	if (EquippedRevolver && RevolverAttachPoint)
+	{
+		EquippedRevolver->AttachToComponent(
+			RevolverAttachPoint,
+			FAttachmentTransformRules::SnapToTargetNotIncludingScale
+		);
+	}
+}
+
+void ALuxCharacter::SpawnDefaultRevolver()
+{
+	if (EquippedRevolver || !GetWorld())
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Owner = this;
+	SpawnParameters.Instigator = this;
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	EquippedRevolver = GetWorld()->SpawnActor<ALuxRevolver>(
+		ALuxRevolver::StaticClass(),
+		GetActorTransform(),
+		SpawnParameters
+	);
+	AttachEquippedRevolver();
+	ForceNetUpdate();
 }
 
 void ALuxCharacter::PawnClientRestart()
