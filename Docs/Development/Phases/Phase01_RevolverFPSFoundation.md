@@ -1,6 +1,6 @@
 # Phase 01 - Revolver FPS Foundation
 
-> 상태: In Progress - 01-D Ready for Review
+> 상태: In Progress - 01-E Correction Ready for Review
 > 선행 Phase: Phase 00 - Multiplayer Foundation  
 > 목표: PROJECT LUX의 유일한 기본 총기인 리볼버를 서버 권한 멀티플레이 구조로 구현하고, 실탄/공탄/고무탄의 숨겨진 탄종 구조와 즉사 규칙까지 검증한다.
 
@@ -393,18 +393,25 @@ HUD 없이 실제 게임에서 사용할 1인칭 리볼버 조작 품질을 완�
 - HUD 없음
 - Local Fire 반응 지연이 과도하지 않음
 
-### 실행 결과 - 2026-09-01 (Ready for Review)
+### 실행 결과 - 2026-09-01 (Correction Ready for Review)
 
 - R21 FP Arms와 Revolver visual을 Local owner 전용 컴포넌트로 구성하고 Collision / Shadow를 비활성화
 - 원본 R21 런타임 기준 Arms transform과 전용 손 소켓 `38`을 적용해 Camera / Sight 중심 정렬 완료
 - 우클릭 `IA_Aim`과 Server 검증 상태를 연결하고 90° → 65° ADS FOV 보간 및 R21 Aim 상태 연동
-- Fire는 공개 LoadedMask만 사용한 Local prediction cosmetic으로 재생하고 정확한 Live / Blank / Rubber 판정은 계속 Server-only로 유지
+- Owner의 즉시 입력 상태와 Server의 Remote 표시 상태를 분리하고 `COND_SkipOwner`를 적용해 지연 복제로 인한 ADS 되감기를 제거
+- R21 AnimBP의 유효한 AnimGraph만 프로젝트 소유 `ABP_LuxFirstPerson`으로 복제하고, 데모 Character Cast EventGraph를 제거한 뒤 typed `ULuxFirstPersonAnimInstance`로 Aim을 전달
+- Fire는 공개 LoadedMask만 사용하는 Local prediction과 요청 ID 기반 Server 확인을 연결해 수락·거절 시 Owner 연출이 누락되거나 중복되지 않도록 보정하고, 정확한 Live / Blank / Rubber 판정은 계속 Server-only로 유지
 - Aim / Hip Fire, Single Round Reload의 Arms / Weapon montage를 함께 재생하고 Dry Fire, Cylinder, Round Insert SFX 연결
+- R21 Door / Drum의 안정된 Open pose를 0.75초 지점에서 유지하고 Insert 후 다시 고정하며 Close / Cancel / Death에서 Arms와 Weapon montage를 함께 정리
 - Live / Blank / Rubber 공통 Fire SFX와 Niagara Muzzle Flash를 사용해 탄종을 외부 연출만으로 구분하지 않음
+- R21 `38` 및 `weapon_r_muzzle` 소켓이 FP Arms 소유임을 검증하고, 모든 Soft asset은 `BeginPlay`에서 한 번만 resolve해 입력 hot path의 동기 로드를 제거
+- Character presentation Tick은 Local owner로 제한하고 사망 시 Aim, FOV, FP 표시와 진행 중 연출을 즉시 정리
 - Crosshair 및 Gameplay HUD를 추가하지 않고 실제 Front Sight 조준이 가능한 화면 정렬 확인
-- UE 5.8 Development Editor 빌드, Map Check, 3 Player PIE, 기존 Client → Host 사격 회귀 검증 통과
+- UE 5.8 Development Editor 빌드와 Map Check 0 Error / 0 Warning 통과
+- 3 Player PIE 50ms / 100ms에서 빠른 ADS, 연속 Fire, Close 직후 Fire, Cylinder Open / Insert pose, 탄종 비밀성, Death 정리 검증 통과
+- 기존 01-C Host → Client / Client → Host / Client → Client 사격과 01-D Client 장전 회귀 검증 통과
 - Remote Third-Person presentation은 계획대로 01-F 범위에 유지
-- 판정: **01-E 검수 기준 통과 / 01-F 진행 가능**
+- 판정: **01-E Correction 검수 기준 통과 / 01-F 진행 가능**
 
 ### 커밋 게이트
 

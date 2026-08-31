@@ -39,6 +39,7 @@ public:
 
 	ALuxRevolver();
 
+	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION(BlueprintPure, Category = "Revolver")
@@ -60,6 +61,7 @@ public:
 	void RequestFire();
 
 	void AttachFirstPersonVisualTo(USkeletalMeshComponent* FirstPersonArms);
+	void StopOwnerPresentation();
 
 	UFUNCTION(BlueprintCallable, Category = "Revolver|Reload")
 	void RequestOpenCylinder();
@@ -118,7 +120,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Revolver|Development", meta = (DevelopmentOnly))
 	FString DescribeLastReloadResultForDevelopment() const;
 
+	UFUNCTION(BlueprintPure, Category = "Revolver|Development", meta = (DevelopmentOnly))
+	int32 GetOwnerFirePresentationCountForDevelopment() const;
+
+	UFUNCTION(BlueprintPure, Category = "Revolver|Development", meta = (DevelopmentOnly))
+	int32 GetOwnerDryFirePresentationCountForDevelopment() const;
+
 private:
+	enum class ELocalFirePrediction : int8
+	{
+		None = -1,
+		Loaded = 0,
+		Dry = 1
+	};
+
 	UFUNCTION()
 	void OnRep_CylinderOpen(bool bWasCylinderOpen);
 
@@ -135,7 +150,10 @@ private:
 	void OnRep_RoundInsertSequence();
 
 	UFUNCTION(Server, Reliable)
-	void ServerFire();
+	void ServerFire(uint16 RequestId);
+
+	UFUNCTION(Client, Reliable)
+	void ClientConfirmFire(uint16 RequestId, bool bAccepted, bool bDryFire);
 
 	UFUNCTION(Server, Reliable)
 	void ServerOpenCylinder();
@@ -148,16 +166,22 @@ private:
 
 	bool CanFire(const ALuxCharacter* EquippedCharacter, double ServerTimeSeconds) const;
 	bool CanManipulateCylinder(const ALuxCharacter* EquippedCharacter) const;
+	void ConfirmLocalFire(uint16 RequestId, bool bAccepted, bool bDryFire);
 	void ClearPendingRoundInsertion();
 	void CommitPendingRoundInsertion();
 	int32 FindNextEmptyChamber(int32 StartIndex) const;
 	bool IsLocallyPresented() const;
 	bool IsValidChamberIndex(int32 ChamberIndex) const;
+	void PauseReloadPresentation();
 	void PlayCylinderPresentation(bool bNowOpen);
 	void PlayFirePresentation(bool bDryFire);
 	void PlayReloadPresentation();
 	void PlayRoundInsertPresentation();
 	void PlaySoundForOwner(USoundBase* Sound, FName SocketName = NAME_None) const;
+	ELocalFirePrediction PredictLocalFire(double LocalTimeSeconds);
+	void ResolvePresentationAssets();
+	bool ResolveServerFire(bool& bOutDryFire);
+	void ScheduleCylinderOpenPosePause();
 	void StopReloadPresentation();
 	ALuxCharacter* TraceCharacter(const ALuxCharacter* EquippedCharacter) const;
 	bool TryCancelReload();
@@ -234,6 +258,42 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
 	TSoftObjectPtr<USoundBase> RoundInsertSound;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ResolvedSingleRoundReloadMontage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ResolvedWeaponSingleRoundReloadMontage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ResolvedAimFireMontage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ResolvedWeaponAimFireMontage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ResolvedHipFireMontage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ResolvedWeaponHipFireMontage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNiagaraSystem> ResolvedMuzzleFlashSystem;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USoundBase> ResolvedFireSound;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USoundBase> ResolvedDryFireSound;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USoundBase> ResolvedCylinderOpenSound;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USoundBase> ResolvedCylinderCloseSound;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USoundBase> ResolvedRoundInsertSound;
+
 	// Technical gate aligned to the first R21 insertion beat; 01-E may retime final playback.
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload", meta = (ClampMin = "0.05"))
 	float RoundInsertCommitDelaySeconds = 0.9f;
@@ -241,16 +301,26 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Fire", meta = (ClampMin = "0.05"))
 	float MinimumFireIntervalSeconds = 0.25f;
 
+	// R21's Door and Drum reach their stable open pose at 0.75 seconds.
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation", meta = (ClampMin = "0.0"))
+	float CylinderOpenPoseDelaySeconds = 0.75f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Fire", meta = (ClampMin = "100.0"))
 	float TraceRange = 10000.0f;
 
 	double LastFireServerTimeSeconds = -1.0;
+	double LastLocalFirePresentationTimeSeconds = -1.0;
 	FName LastFireResultForDevelopment = TEXT("None");
 	TWeakObjectPtr<ALuxCharacter> LastNonLethalHitForDevelopment;
+	TMap<uint16, ELocalFirePrediction> LocalFirePredictions;
+	uint16 NextLocalFireRequestId = 0;
+	int32 OwnerFirePresentationCount = 0;
+	int32 OwnerDryFirePresentationCount = 0;
 
 	uint8 ReloadChamberIndex = 0;
 	uint8 PendingRoundChamberIndex = ChamberCount;
 	ELuxRevolverRoundType PendingRoundType = ELuxRevolverRoundType::Empty;
 	FTimerHandle RoundInsertionTimer;
+	FTimerHandle CylinderOpenPoseTimer;
 	FName LastReloadResultForDevelopment = TEXT("None");
 };

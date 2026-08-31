@@ -110,6 +110,12 @@ ALuxRevolver::ALuxRevolver()
 	}
 }
 
+void ALuxRevolver::BeginPlay()
+{
+	Super::BeginPlay();
+	ResolvePresentationAssets();
+}
+
 void ALuxRevolver::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -151,26 +157,41 @@ bool ALuxRevolver::IsChamberLoaded(int32 ChamberIndex) const
 
 void ALuxRevolver::RequestFire()
 {
-	const ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
-	if (
-		IsLocallyPresented()
-		&& EquippedCharacter
-		&& !EquippedCharacter->IsDead()
-		&& !bCylinderOpen
-		&& IsValidChamberIndex(CurrentChamberIndex)
-	)
+	uint16 RequestId = 0;
+	if (IsLocallyPresented())
 	{
-		// Occupancy is public, but the exact Live / Blank / Rubber type remains server-only.
-		PlayFirePresentation(!IsChamberLoaded(CurrentChamberIndex));
+		do
+		{
+			++NextLocalFireRequestId;
+		} while (NextLocalFireRequestId == 0);
+		RequestId = NextLocalFireRequestId;
+
+		const UWorld* World = GetWorld();
+		const double LocalTimeSeconds = World ? World->GetTimeSeconds() : 0.0;
+		const ELocalFirePrediction Prediction = PredictLocalFire(LocalTimeSeconds);
+		LocalFirePredictions.Add(RequestId, Prediction);
+		if (Prediction != ELocalFirePrediction::None)
+		{
+			PlayFirePresentation(Prediction == ELocalFirePrediction::Dry);
+		}
 	}
 
 	if (HasAuthority())
 	{
-		ServerFire_Implementation();
+		bool bDryFire = false;
+		const bool bAccepted = ResolveServerFire(bDryFire);
+		if (IsLocallyPresented())
+		{
+			ConfirmLocalFire(RequestId, bAccepted, bDryFire);
+		}
+		else
+		{
+			ClientConfirmFire(RequestId, bAccepted, bDryFire);
+		}
 		return;
 	}
 
-	ServerFire();
+	ServerFire(RequestId);
 }
 
 void ALuxRevolver::AttachFirstPersonVisualTo(USkeletalMeshComponent* FirstPersonArms)
@@ -180,11 +201,27 @@ void ALuxRevolver::AttachFirstPersonVisualTo(USkeletalMeshComponent* FirstPerson
 		return;
 	}
 
+	ensureMsgf(
+		FirstPersonArms->DoesSocketExist(R21WeaponSocket),
+		TEXT("R21 First Person Arms is missing required weapon socket '%s'."),
+		*R21WeaponSocket.ToString()
+	);
+	ensureMsgf(
+		FirstPersonArms->DoesSocketExist(R21MuzzleSocket),
+		TEXT("R21 First Person Arms is missing required muzzle socket '%s'."),
+		*R21MuzzleSocket.ToString()
+	);
+
 	FirstPersonWeaponMesh->AttachToComponent(
 		FirstPersonArms,
 		FAttachmentTransformRules::SnapToTargetNotIncludingScale,
 		R21WeaponSocket
 	);
+}
+
+void ALuxRevolver::StopOwnerPresentation()
+{
+	StopReloadPresentation();
 }
 
 void ALuxRevolver::RequestOpenCylinder()
@@ -203,21 +240,17 @@ void ALuxRevolver::OnRep_CylinderOpen(bool bWasCylinderOpen)
 	if (bWasCylinderOpen != bCylinderOpen && IsLocallyPresented())
 	{
 		PlayCylinderPresentation(bCylinderOpen);
-		if (!bCylinderOpen)
-		{
-			StopReloadPresentation();
-		}
 	}
 }
 
 void ALuxRevolver::OnRep_FireSequence()
 {
-	// The owning client already predicts its owner-only presentation in RequestFire.
+	// Owner presentation is reconciled by ClientConfirmFire using the matching request id.
 }
 
 void ALuxRevolver::OnRep_DryFireSequence()
 {
-	// The owning client already predicts its owner-only presentation in RequestFire.
+	// Owner presentation is reconciled by ClientConfirmFire using the matching request id.
 }
 
 void ALuxRevolver::OnRep_ReloadSequence()
@@ -322,7 +355,7 @@ int32 ALuxRevolver::GetRoundInsertSequence() const
 
 UAnimMontage* ALuxRevolver::GetSingleRoundReloadMontage() const
 {
-	return SingleRoundReloadMontage.LoadSynchronous();
+	return ResolvedSingleRoundReloadMontage;
 }
 
 int32 ALuxRevolver::GetFireSequence() const
@@ -407,15 +440,63 @@ FString ALuxRevolver::DescribeLastReloadResultForDevelopment() const
 	return HasAuthority() ? LastReloadResultForDevelopment.ToString() : TEXT("AuthorityOnly");
 }
 
-void ALuxRevolver::ServerFire_Implementation()
+int32 ALuxRevolver::GetOwnerFirePresentationCountForDevelopment() const
 {
+	return OwnerFirePresentationCount;
+}
+
+int32 ALuxRevolver::GetOwnerDryFirePresentationCountForDevelopment() const
+{
+	return OwnerDryFirePresentationCount;
+}
+
+void ALuxRevolver::ServerFire_Implementation(uint16 RequestId)
+{
+	bool bDryFire = false;
+	const bool bAccepted = ResolveServerFire(bDryFire);
+	ClientConfirmFire(RequestId, bAccepted, bDryFire);
+}
+
+void ALuxRevolver::ClientConfirmFire_Implementation(uint16 RequestId, bool bAccepted, bool bDryFire)
+{
+	ConfirmLocalFire(RequestId, bAccepted, bDryFire);
+}
+
+void ALuxRevolver::ConfirmLocalFire(uint16 RequestId, bool bAccepted, bool bDryFire)
+{
+	const ELocalFirePrediction* Prediction = LocalFirePredictions.Find(RequestId);
+	if (bAccepted)
+	{
+		const ELocalFirePrediction AuthoritativeResult =
+			bDryFire ? ELocalFirePrediction::Dry : ELocalFirePrediction::Loaded;
+		if (!Prediction || *Prediction == ELocalFirePrediction::None)
+		{
+			PlayFirePresentation(bDryFire);
+		}
+		else if (*Prediction != AuthoritativeResult)
+		{
+			// Public chamber replication will converge the next prediction. Do not double-play this shot.
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("LuxRevolver: local fire prediction disagreed with authoritative public result.")
+			);
+		}
+	}
+
+	LocalFirePredictions.Remove(RequestId);
+}
+
+bool ALuxRevolver::ResolveServerFire(bool& bOutDryFire)
+{
+	bOutDryFire = false;
 	ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
 	const UWorld* World = GetWorld();
 	const double ServerTimeSeconds = World ? World->GetTimeSeconds() : 0.0;
 	if (!CanFire(EquippedCharacter, ServerTimeSeconds))
 	{
 		LastFireResultForDevelopment = TEXT("Rejected");
-		return;
+		return false;
 	}
 
 	LastFireServerTimeSeconds = ServerTimeSeconds;
@@ -424,11 +505,12 @@ void ALuxRevolver::ServerFire_Implementation()
 
 	if (RoundType == ELuxRevolverRoundType::Empty)
 	{
+		bOutDryFire = true;
 		++DryFireSequence;
 		LastFireResultForDevelopment = TEXT("DryFire");
 		OnDryFire.Broadcast(this);
 		ForceNetUpdate();
-		return;
+		return true;
 	}
 
 	ALuxCharacter* HitCharacter = nullptr;
@@ -468,6 +550,7 @@ void ALuxRevolver::ServerFire_Implementation()
 	++FireSequence;
 	ConsumeCurrentRoundAndAdvance();
 	ForceNetUpdate();
+	return true;
 }
 
 void ALuxRevolver::ServerOpenCylinder_Implementation()
@@ -505,6 +588,32 @@ bool ALuxRevolver::CanManipulateCylinder(const ALuxCharacter* EquippedCharacter)
 		&& EquippedCharacter
 		&& EquippedCharacter->GetEquippedRevolver() == this
 		&& !EquippedCharacter->IsDead();
+}
+
+ALuxRevolver::ELocalFirePrediction ALuxRevolver::PredictLocalFire(double LocalTimeSeconds)
+{
+	const ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
+	if (
+		!IsLocallyPresented()
+		|| !EquippedCharacter
+		|| EquippedCharacter->GetEquippedRevolver() != this
+		|| EquippedCharacter->IsDead()
+		|| bCylinderOpen
+		|| !IsValidChamberIndex(CurrentChamberIndex)
+		|| (
+			LastLocalFirePresentationTimeSeconds >= 0.0
+			&& LocalTimeSeconds - LastLocalFirePresentationTimeSeconds < MinimumFireIntervalSeconds
+		)
+	)
+	{
+		return ELocalFirePrediction::None;
+	}
+
+	LastLocalFirePresentationTimeSeconds = LocalTimeSeconds;
+	// Occupancy is public; exact Live / Blank / Rubber identity remains server-only.
+	return IsChamberLoaded(CurrentChamberIndex)
+		? ELocalFirePrediction::Loaded
+		: ELocalFirePrediction::Dry;
 }
 
 void ALuxRevolver::ClearPendingRoundInsertion()
@@ -582,9 +691,47 @@ bool ALuxRevolver::IsLocallyPresented() const
 	return EquippedCharacter && EquippedCharacter->IsLocallyControlled();
 }
 
+void ALuxRevolver::ResolvePresentationAssets()
+{
+	ResolvedSingleRoundReloadMontage = SingleRoundReloadMontage.LoadSynchronous();
+	ResolvedWeaponSingleRoundReloadMontage = WeaponSingleRoundReloadMontage.LoadSynchronous();
+	ResolvedAimFireMontage = AimFireMontage.LoadSynchronous();
+	ResolvedWeaponAimFireMontage = WeaponAimFireMontage.LoadSynchronous();
+	ResolvedHipFireMontage = HipFireMontage.LoadSynchronous();
+	ResolvedWeaponHipFireMontage = WeaponHipFireMontage.LoadSynchronous();
+	ResolvedMuzzleFlashSystem = MuzzleFlashSystem.LoadSynchronous();
+	ResolvedFireSound = FireSound.LoadSynchronous();
+	ResolvedDryFireSound = DryFireSound.LoadSynchronous();
+	ResolvedCylinderOpenSound = CylinderOpenSound.LoadSynchronous();
+	ResolvedCylinderCloseSound = CylinderCloseSound.LoadSynchronous();
+	ResolvedRoundInsertSound = RoundInsertSound.LoadSynchronous();
+
+	ensureMsgf(ResolvedSingleRoundReloadMontage, TEXT("Missing required R21 arms reload montage."));
+	ensureMsgf(ResolvedWeaponSingleRoundReloadMontage, TEXT("Missing required R21 weapon reload montage."));
+	ensureMsgf(ResolvedAimFireMontage, TEXT("Missing required R21 arms aim-fire montage."));
+	ensureMsgf(ResolvedWeaponAimFireMontage, TEXT("Missing required R21 weapon aim-fire montage."));
+	ensureMsgf(ResolvedHipFireMontage, TEXT("Missing required R21 arms hip-fire montage."));
+	ensureMsgf(ResolvedWeaponHipFireMontage, TEXT("Missing required R21 weapon hip-fire montage."));
+	ensureMsgf(ResolvedMuzzleFlashSystem, TEXT("Missing required muzzle flash system."));
+	ensureMsgf(ResolvedFireSound, TEXT("Missing required R21 fire sound."));
+	ensureMsgf(ResolvedDryFireSound, TEXT("Missing required R21 dry-fire sound."));
+	ensureMsgf(ResolvedCylinderOpenSound, TEXT("Missing required R21 cylinder-open sound."));
+	ensureMsgf(ResolvedCylinderCloseSound, TEXT("Missing required R21 cylinder-close sound."));
+	ensureMsgf(ResolvedRoundInsertSound, TEXT("Missing required R21 round-insert sound."));
+}
+
 void ALuxRevolver::PlayCylinderPresentation(bool bNowOpen)
 {
-	PlaySoundForOwner((bNowOpen ? CylinderOpenSound : CylinderCloseSound).LoadSynchronous());
+	PlaySoundForOwner(bNowOpen ? ResolvedCylinderOpenSound : ResolvedCylinderCloseSound);
+	if (bNowOpen)
+	{
+		PlayReloadPresentation();
+		ScheduleCylinderOpenPosePause();
+	}
+	else
+	{
+		StopReloadPresentation();
+	}
 }
 
 void ALuxRevolver::PlayFirePresentation(bool bDryFire)
@@ -597,15 +744,17 @@ void ALuxRevolver::PlayFirePresentation(bool bDryFire)
 	ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
 	if (bDryFire)
 	{
-		PlaySoundForOwner(DryFireSound.LoadSynchronous(), R21WeaponSocket);
+		++OwnerDryFirePresentationCount;
+		PlaySoundForOwner(ResolvedDryFireSound, R21WeaponSocket);
 		return;
 	}
+	++OwnerFirePresentationCount;
 
 	const bool bAiming = EquippedCharacter && EquippedCharacter->IsAiming();
 	if (EquippedCharacter)
 	{
 		EquippedCharacter->PlayFirstPersonMontage(
-			(bAiming ? AimFireMontage : HipFireMontage).LoadSynchronous()
+			bAiming ? ResolvedAimFireMontage : ResolvedHipFireMontage
 		);
 	}
 	if (FirstPersonWeaponMesh)
@@ -613,16 +762,16 @@ void ALuxRevolver::PlayFirePresentation(bool bDryFire)
 		if (UAnimInstance* AnimInstance = FirstPersonWeaponMesh->GetAnimInstance())
 		{
 			AnimInstance->Montage_Play(
-				(bAiming ? WeaponAimFireMontage : WeaponHipFireMontage).LoadSynchronous()
+				bAiming ? ResolvedWeaponAimFireMontage : ResolvedWeaponHipFireMontage
 			);
 		}
 	}
 
-	PlaySoundForOwner(FireSound.LoadSynchronous(), R21MuzzleSocket);
+	PlaySoundForOwner(ResolvedFireSound, R21MuzzleSocket);
 	if (EquippedCharacter)
 	{
 		USkeletalMeshComponent* FirstPersonArms = EquippedCharacter->GetFirstPersonArms();
-		UNiagaraSystem* MuzzleFlash = MuzzleFlashSystem.LoadSynchronous();
+		UNiagaraSystem* MuzzleFlash = ResolvedMuzzleFlashSystem;
 		if (FirstPersonArms && MuzzleFlash)
 		{
 			UNiagaraFunctionLibrary::SpawnSystemAttached(
@@ -645,22 +794,65 @@ void ALuxRevolver::PlayReloadPresentation()
 		return;
 	}
 
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(CylinderOpenPoseTimer);
+	}
+
 	if (ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner()))
 	{
-		EquippedCharacter->PlayFirstPersonMontage(SingleRoundReloadMontage.LoadSynchronous(), 1.3f);
+		EquippedCharacter->PlayFirstPersonMontage(ResolvedSingleRoundReloadMontage, 1.3f);
 	}
 	if (FirstPersonWeaponMesh)
 	{
 		if (UAnimInstance* AnimInstance = FirstPersonWeaponMesh->GetAnimInstance())
 		{
-			AnimInstance->Montage_Play(WeaponSingleRoundReloadMontage.LoadSynchronous(), 1.3f);
+			AnimInstance->Montage_Play(ResolvedWeaponSingleRoundReloadMontage, 1.3f);
 		}
 	}
 }
 
 void ALuxRevolver::PlayRoundInsertPresentation()
 {
-	PlaySoundForOwner(RoundInsertSound.LoadSynchronous(), R21WeaponSocket);
+	PauseReloadPresentation();
+	PlaySoundForOwner(ResolvedRoundInsertSound, R21WeaponSocket);
+}
+
+void ALuxRevolver::ScheduleCylinderOpenPosePause()
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	GetWorld()->GetTimerManager().SetTimer(
+		CylinderOpenPoseTimer,
+		this,
+		&ALuxRevolver::PauseReloadPresentation,
+		CylinderOpenPoseDelaySeconds,
+		false
+	);
+}
+
+void ALuxRevolver::PauseReloadPresentation()
+{
+	if (ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner()))
+	{
+		if (USkeletalMeshComponent* Arms = EquippedCharacter->GetFirstPersonArms())
+		{
+			if (UAnimInstance* AnimInstance = Arms->GetAnimInstance())
+			{
+				AnimInstance->Montage_Pause(ResolvedSingleRoundReloadMontage);
+			}
+		}
+	}
+	if (FirstPersonWeaponMesh)
+	{
+		if (UAnimInstance* AnimInstance = FirstPersonWeaponMesh->GetAnimInstance())
+		{
+			AnimInstance->Montage_Pause(ResolvedWeaponSingleRoundReloadMontage);
+		}
+	}
 }
 
 void ALuxRevolver::PlaySoundForOwner(USoundBase* Sound, FName SocketName) const
@@ -675,6 +867,10 @@ void ALuxRevolver::PlaySoundForOwner(USoundBase* Sound, FName SocketName) const
 
 void ALuxRevolver::StopReloadPresentation()
 {
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(CylinderOpenPoseTimer);
+	}
 	if (ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner()))
 	{
 		EquippedCharacter->StopFirstPersonMontages();
@@ -704,7 +900,6 @@ bool ALuxRevolver::TryCancelReload()
 	if (IsLocallyPresented())
 	{
 		PlayCylinderPresentation(false);
-		StopReloadPresentation();
 	}
 	return true;
 }
@@ -724,7 +919,6 @@ bool ALuxRevolver::TryCloseCylinder()
 	if (IsLocallyPresented())
 	{
 		PlayCylinderPresentation(false);
-		StopReloadPresentation();
 	}
 	return true;
 }

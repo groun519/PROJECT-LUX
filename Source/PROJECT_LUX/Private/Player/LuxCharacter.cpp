@@ -14,8 +14,8 @@
 #include "InputActionValue.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
+#include "Player/LuxFirstPersonAnimInstance.h"
 #include "UObject/ConstructorHelpers.h"
-#include "UObject/UnrealType.h"
 #include "Weapons/LuxRevolver.h"
 
 ALuxCharacter::ALuxCharacter()
@@ -75,7 +75,7 @@ ALuxCharacter::ALuxCharacter()
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> FirstPersonArmsFinder(
 		TEXT("/Game/RevolverFPGM/Demo/FirstPersonArms/Character/Mesh/SKM_Mannequin_Arms.SKM_Mannequin_Arms"));
 	static ConstructorHelpers::FClassFinder<UAnimInstance> FirstPersonAnimClassFinder(
-		TEXT("/Game/RevolverFPGM/System/Animation/ABP_Base"));
+		TEXT("/Game/LUX/Animation/Revolver/ABP_LuxFirstPerson"));
 
 	PlayerMappingContext = MappingContextFinder.Object;
 	MoveAction = MoveActionFinder.Object;
@@ -104,6 +104,8 @@ ALuxCharacter::ALuxCharacter()
 void ALuxCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	SetActorTickEnabled(IsLocallyControlled());
+	UpdateFirstPersonAimAnimation();
 
 	if (HasAuthority())
 	{
@@ -134,7 +136,7 @@ void ALuxCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 	DOREPLIFETIME(ALuxCharacter, EquippedRevolver);
 	DOREPLIFETIME(ALuxCharacter, bIsDead);
-	DOREPLIFETIME(ALuxCharacter, bIsAiming);
+	DOREPLIFETIME_CONDITION(ALuxCharacter, bIsAiming, COND_SkipOwner);
 }
 
 ALuxRevolver* ALuxCharacter::GetEquippedRevolver() const
@@ -149,7 +151,12 @@ bool ALuxCharacter::IsDead() const
 
 bool ALuxCharacter::IsAiming() const
 {
-	return bIsAiming;
+	return IsLocallyControlled() ? bLocalAimIntent : bIsAiming;
+}
+
+bool ALuxCharacter::GetLocalAimIntentForDevelopment() const
+{
+	return bLocalAimIntent;
 }
 
 USkeletalMeshComponent* ALuxCharacter::GetFirstPersonArms() const
@@ -190,6 +197,7 @@ bool ALuxCharacter::Die()
 
 	bIsDead = true;
 	bIsAiming = false;
+	bLocalAimIntent = false;
 	ApplyDeathState();
 	ForceNetUpdate();
 	return true;
@@ -211,10 +219,24 @@ void ALuxCharacter::OnRep_IsDead()
 void ALuxCharacter::ApplyDeathState()
 {
 	bIsAiming = false;
+	bLocalAimIntent = false;
+	UpdateFirstPersonAimAnimation();
+	if (FirstPersonCamera)
+	{
+		FirstPersonCamera->SetFieldOfView(DefaultFieldOfView);
+	}
+	SetActorTickEnabled(false);
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	StopFirstPersonMontages();
+	if (EquippedRevolver)
+	{
+		EquippedRevolver->StopOwnerPresentation();
+	}
+	else
+	{
+		StopFirstPersonMontages();
+	}
 	if (FirstPersonArms)
 	{
 		FirstPersonArms->SetVisibility(false, true);
@@ -257,6 +279,8 @@ void ALuxCharacter::SpawnDefaultRevolver()
 void ALuxCharacter::PawnClientRestart()
 {
 	Super::PawnClientRestart();
+	SetActorTickEnabled(true);
+	UpdateFirstPersonAimAnimation();
 
 	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
 	const ULocalPlayer* LocalPlayer = PlayerController ? PlayerController->GetLocalPlayer() : nullptr;
@@ -317,14 +341,16 @@ void ALuxCharacter::AimStopped(const FInputActionValue& Value)
 void ALuxCharacter::SetAiming(bool bNewAiming)
 {
 	bNewAiming = bNewAiming && !bIsDead;
-	if (bIsAiming == bNewAiming)
+	if (bLocalAimIntent == bNewAiming)
 	{
 		return;
 	}
 
-	bIsAiming = bNewAiming;
+	bLocalAimIntent = bNewAiming;
+	UpdateFirstPersonAimAnimation();
 	if (HasAuthority())
 	{
+		bIsAiming = bNewAiming;
 		ForceNetUpdate();
 	}
 	else
@@ -339,6 +365,16 @@ void ALuxCharacter::ServerSetAiming_Implementation(bool bNewAiming)
 	ForceNetUpdate();
 }
 
+void ALuxCharacter::UpdateFirstPersonAimAnimation()
+{
+	ULuxFirstPersonAnimInstance* AnimInstance =
+		FirstPersonArms ? Cast<ULuxFirstPersonAnimInstance>(FirstPersonArms->GetAnimInstance()) : nullptr;
+	if (AnimInstance)
+	{
+		AnimInstance->SetAiming(IsAiming() && !bIsDead);
+	}
+}
+
 void ALuxCharacter::UpdateFirstPersonPresentation(float DeltaSeconds)
 {
 	if (!IsLocallyControlled() || !FirstPersonCamera)
@@ -346,23 +382,13 @@ void ALuxCharacter::UpdateFirstPersonPresentation(float DeltaSeconds)
 		return;
 	}
 
-	const float TargetFieldOfView = bIsAiming && !bIsDead ? AimFieldOfView : DefaultFieldOfView;
+	const float TargetFieldOfView = IsAiming() && !bIsDead ? AimFieldOfView : DefaultFieldOfView;
 	FirstPersonCamera->SetFieldOfView(FMath::FInterpTo(
 		FirstPersonCamera->FieldOfView,
 		TargetFieldOfView,
 		DeltaSeconds,
 		AimInterpolationSpeed
 	));
-
-	UAnimInstance* AnimInstance = FirstPersonArms ? FirstPersonArms->GetAnimInstance() : nullptr;
-	if (AnimInstance)
-	{
-		// R21's sample AnimBP casts to its demo character. Drive the one state we reuse directly.
-		if (FBoolProperty* AimProperty = FindFProperty<FBoolProperty>(AnimInstance->GetClass(), TEXT("Aim")))
-		{
-			AimProperty->SetPropertyValue_InContainer(AnimInstance, bIsAiming && !bIsDead);
-		}
-	}
 }
 
 void ALuxCharacter::Fire(const FInputActionValue& Value)

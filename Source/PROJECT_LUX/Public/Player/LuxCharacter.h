@@ -37,10 +37,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Revolver")
 	bool IsAiming() const;
 
+	UFUNCTION(BlueprintPure, Category = "Revolver|Development", meta = (DevelopmentOnly))
+	bool GetLocalAimIntentForDevelopment() const;
+
 	USkeletalMeshComponent* GetFirstPersonArms() const;
 	void PlayFirstPersonMontage(UAnimMontage* Montage, float PlayRate = 1.0f);
 	void StopFirstPersonMontages(float BlendOutSeconds = 0.15f);
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "State")
 	bool Die();
 
 private:
@@ -58,6 +62,7 @@ private:
 	void AimStarted(const FInputActionValue& Value);
 	void AimStopped(const FInputActionValue& Value);
 	void SetAiming(bool bNewAiming);
+	void UpdateFirstPersonAimAnimation();
 	void UpdateFirstPersonPresentation(float DeltaSeconds);
 	void Fire(const FInputActionValue& Value);
 	void Reload(const FInputActionValue& Value);
@@ -80,8 +85,11 @@ private:
 	UPROPERTY(ReplicatedUsing = OnRep_IsDead, VisibleInstanceOnly, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
 	bool bIsDead = false;
 
+	// Server-authoritative state for remote presentation. The owner uses bLocalAimIntent immediately.
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	bool bIsAiming = false;
+
+	bool bLocalAimIntent = false;
 
 	UPROPERTY(EditDefaultsOnly, Category = "View", meta = (ClampMin = "30.0", ClampMax = "120.0"))
 	float DefaultFieldOfView = 90.0f;
