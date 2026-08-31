@@ -115,7 +115,7 @@ Codex는 위 항목을 임의로 결정하지 않는다.
 |---:|---|---|---|
 | 00 | Multiplayer Foundation | 접속, Spawn, Possess, 이동, PlayerState 기반 | 상세 계획 완료 |
 | 01 | Revolver FPS Foundation | 리볼버, Chamber, 탄종, 사격, 즉사, 애니메이션 | 상세 계획 완료 |
-| 02 | Round Foundation | 매치 상태, 시작/종료, 플레이어 생존 상태 | 잠정 |
+| 02 | Round & Game Rule Foundation | Death Event, 참가자 생존 상태, End Condition, authoritative 게임 종료 | 상세 계획 초안 |
 | 03 | Parasite / Host Foundation | Citizen / Host / Parasite 상태 분리 | 잠정 |
 | 04 | Host Control Technical Spike | 같은 몸을 두 플레이어가 제어하는 기술 검증 | 잠정 |
 | 05 | Activity & Resistance | 기생물 활성도와 숙주 저항 | 잠정 |
@@ -150,7 +150,20 @@ FPS Milestone이 끝난 시점에 다음을 확인한 뒤 후속 Phase 순서를
 - 리볼버 한 종류만으로 충분한가
 - 공탄/고무탄이 실제 심리전 도구가 될 가능성이 있는가
 
-이 검증 이후 Phase 02부터 다시 세부 계획을 작성한다.
+이 검증 이후 Phase 02부터 후속 구조를 다시 세부화한다.
+
+현재 논의 결과 Phase 02의 Round / Game Rule 기반은 상세 초안을 작성했다.
+
+- [Phase 02 - Round & Game Rule Foundation](Phases/Phase02_RoundGameRuleFoundation.md)
+- Character는 죽음을 확정한 뒤 `OnDeathConfirmed`만 Broadcast한다.
+- GameMode가 Character의 Death Event를 수신하고 GameRuleManager로 전달한다.
+- GameRuleManager가 참가자 상태와 End Condition을 평가한다.
+- 종료 조건 충족 시 Manager가 GameMode에 Game End를 Request한다.
+- GameMode가 authoritative하게 결과를 확정하고 GameState가 이를 Replicate한다.
+- 현재 첫 End Condition은 Last Survivor 방식의 섬멸 규칙이다.
+- 최종 PROJECT LUX에서 복수 승자가 존재할 수 있으므로 Result는 Single Winner 전용 구조로 만들지 않는다.
+
+Room Frame / Map 생성 구조는 방향만 논의되었으며 아직 상세 계획으로 확정하지 않는다. 해당 구조는 별도 설계 논의 후 Roadmap에 반영한다.
 
 ---
 
@@ -215,7 +228,7 @@ FPS Milestone이 끝난 시점에 다음을 확인한 뒤 후속 Phase 순서를
 
 # 6. Checkpoint 실행 원칙
 
-Phase 00~01은 Checkpoint 단위로 구현, 검수, 커밋한다.
+Phase 00~01은 Checkpoint 단위로 구현, 검수, 커밋한다. Phase 02 역시 상세 계획 검수 후 동일한 Checkpoint 방식으로 진행한다.
 
 Phase 00:
 - 00-A Project & Asset Preflight
@@ -235,3 +248,13 @@ Phase 01:
 - 01-G Six-Player Revolver QA & Phase Close
 
 각 Checkpoint는 구현 후 테스트 결과를 보고하고 검수 전에는 다음 Checkpoint로 넘어가지 않는다. 검수 통과 후에만 커밋한다.
+
+
+## Phase 02 Draft Checkpoints
+
+- 02-A Death Event Boundary
+- 02-B Game Rule Manager & Participant Tracking
+- 02-C End Condition & Authoritative Game End
+- 02-D Elimination Multiplayer QA & Phase Close
+
+Phase 02는 아직 설계 검수 전 Draft다. 구현은 문서 검수 후 시작한다.
