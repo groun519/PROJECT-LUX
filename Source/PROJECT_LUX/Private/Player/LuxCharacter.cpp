@@ -49,6 +49,8 @@ ALuxCharacter::ALuxCharacter()
 		TEXT("/Game/LUX/Input/IA_Look.IA_Look"));
 	static ConstructorHelpers::FObjectFinder<UInputAction> FireActionFinder(
 		TEXT("/Game/LUX/Input/IA_Fire.IA_Fire"));
+	static ConstructorHelpers::FObjectFinder<UInputAction> ReloadActionFinder(
+		TEXT("/Game/LUX/Input/IA_Reload.IA_Reload"));
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> ThirdPersonMeshFinder(
 		TEXT("/Game/SCK_Casual01/Models/Premade_Characters/MESH_PC_00.MESH_PC_00"));
 	static ConstructorHelpers::FClassFinder<UAnimInstance> ThirdPersonAnimClassFinder(
@@ -58,6 +60,7 @@ ALuxCharacter::ALuxCharacter()
 	MoveAction = MoveActionFinder.Object;
 	LookAction = LookActionFinder.Object;
 	FireAction = FireActionFinder.Object;
+	ReloadAction = ReloadActionFinder.Object;
 	if (ThirdPersonMeshFinder.Succeeded())
 	{
 		ThirdPersonMesh->SetSkeletalMeshAsset(ThirdPersonMeshFinder.Object);
@@ -206,6 +209,10 @@ void ALuxCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	{
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Started, this, &ALuxCharacter::Fire);
 	}
+	if (ReloadAction)
+	{
+		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Started, this, &ALuxCharacter::Reload);
+	}
 }
 
 void ALuxCharacter::Fire(const FInputActionValue& Value)
@@ -213,6 +220,27 @@ void ALuxCharacter::Fire(const FInputActionValue& Value)
 	if (!bIsDead && Value.Get<bool>() && EquippedRevolver)
 	{
 		EquippedRevolver->RequestFire();
+	}
+}
+
+void ALuxCharacter::Reload(const FInputActionValue& Value)
+{
+	if (bIsDead || !Value.Get<bool>() || !EquippedRevolver)
+	{
+		return;
+	}
+
+	if (!EquippedRevolver->IsCylinderOpen())
+	{
+		EquippedRevolver->RequestOpenCylinder();
+	}
+	else if (EquippedRevolver->IsRoundInsertionPending())
+	{
+		EquippedRevolver->RequestCancelReload();
+	}
+	else
+	{
+		EquippedRevolver->RequestCloseCylinder();
 	}
 }
 

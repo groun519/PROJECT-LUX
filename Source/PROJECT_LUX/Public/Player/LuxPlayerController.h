@@ -4,6 +4,8 @@
 #include "GameFramework/PlayerController.h"
 #include "LuxPlayerController.generated.h"
 
+enum class ELuxRevolverRoundType : uint8;
+
 UCLASS()
 class PROJECT_LUX_API ALuxPlayerController : public APlayerController
 {
@@ -32,7 +34,13 @@ public:
 	UFUNCTION(Exec)
 	void LuxSessionStatus();
 
+	UFUNCTION(Exec, BlueprintCallable, Category = "Development|Revolver", meta = (DevelopmentOnly))
+	void LuxLoadRound(FString RoundType);
+
 private:
+	UFUNCTION(Server, Reliable)
+	void ServerLoadRoundForDevelopment(ELuxRevolverRoundType RoundType);
+
 	UFUNCTION()
 	void HandleDevelopmentFindSessionsComplete(bool bWasSuccessful, int32 ResultCount);
 

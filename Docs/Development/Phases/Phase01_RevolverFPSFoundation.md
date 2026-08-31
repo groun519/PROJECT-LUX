@@ -1,6 +1,6 @@
 # Phase 01 - Revolver FPS Foundation
 
-> 상태: In Progress - 01-C Ready for Review
+> 상태: In Progress - 01-D Ready for Review
 > 선행 Phase: Phase 00 - Multiplayer Foundation  
 > 목표: PROJECT LUX의 유일한 기본 총기인 리볼버를 서버 권한 멀티플레이 구조로 구현하고, 실탄/공탄/고무탄의 숨겨진 탄종 구조와 즉사 규칙까지 검증한다.
 
@@ -322,6 +322,20 @@ feat: add authoritative revolver firing and lethal hits
 - 탄종 비밀 유지
 - R21 Reload와 실제 Server insertion timing이 어긋나지 않음
 - Debug driver가 Production Insert API를 우회하지 않음
+
+### 실행 결과 - 2026-08-31 (Ready for Review)
+
+- Boolean `IA_Reload`를 `R`로 `IMC_Player`에 추가하고 Character 입력에 연결
+- `R` 입력은 Cylinder Closed에서 Open, Open/Idle에서 Close, 삽입 대기 중에는 Cancel로 동작
+- Open / Close / Cancel 요청은 장착 상태와 생존 상태를 Server에서 검증
+- Live / Blank / Rubber가 모두 Server-only `BeginRoundInsertion` API를 사용하고 다음 빈 Chamber에 한 발씩 삽입
+- R21 `AM_Reload_SingleBullet_Revolver`를 명시적으로 참조하고 첫 삽입 박자에 맞춘 0.9초 후 Server 확정 타이머 연결
+- 삽입 시작/확정은 일반화된 `ReloadSequence`, `RoundInsertSequence`, `bRoundInsertionPending`만 복제하고 정확한 탄종은 비복제 유지
+- `LuxLoadRound Live|Blank|Rubber` 개발용 명령은 PlayerController Server RPC를 거쳐 동일 Production API만 호출하며 Shipping에서는 무효
+- 3 Player PIE에서 Client Reload 입력, Live→Blank→Rubber 순차 장전, 중간 취소, 재개, LoadedMask 수렴과 Close 후 Fire 확인
+- Remote Client의 정확한 Chamber 조회는 계속 `AuthorityOnly`; 공개 결과는 `LoadedMask=7`과 일반 장전 상태뿐임
+- R21 몽타주 자체에는 삽입 Notify가 없어 01-D는 분석된 0.9초 기술 게이트를 사용하며, 실제 FP 재생과 최종 미세 조정은 01-E에서 수행
+- 판정: **01-D 검수 기준 통과 / 01-E 진행 가능**
 
 ### 커밋 게이트
 
@@ -1172,8 +1186,8 @@ Live / Blank / Rubber / Empty / Live / Blank
 - [x] Dead player fire blocked
 - [ ] Aim input
 - [ ] No crosshair
-- [ ] Debug round insertion driver
-- [ ] Reload production API
+- [x] Debug round insertion driver
+- [x] Reload production API
 
 ## Asset
 

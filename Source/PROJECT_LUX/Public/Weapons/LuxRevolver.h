@@ -7,6 +7,7 @@
 
 class ALuxCharacter;
 class ALuxRevolver;
+class UAnimMontage;
 
 UENUM(BlueprintType)
 enum class ELuxRevolverRoundType : uint8
@@ -55,6 +56,31 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Revolver")
 	void RequestFire();
 
+	UFUNCTION(BlueprintCallable, Category = "Revolver|Reload")
+	void RequestOpenCylinder();
+
+	UFUNCTION(BlueprintCallable, Category = "Revolver|Reload")
+	void RequestCloseCylinder();
+
+	UFUNCTION(BlueprintCallable, Category = "Revolver|Reload")
+	void RequestCancelReload();
+
+	// Server-side production entry point. Future ammo inventory code must use this path.
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Revolver|Reload")
+	bool BeginRoundInsertion(ELuxRevolverRoundType RoundType);
+
+	UFUNCTION(BlueprintPure, Category = "Revolver|Reload")
+	bool IsRoundInsertionPending() const;
+
+	UFUNCTION(BlueprintPure, Category = "Revolver|Reload")
+	int32 GetReloadSequence() const;
+
+	UFUNCTION(BlueprintPure, Category = "Revolver|Reload")
+	int32 GetRoundInsertSequence() const;
+
+	UFUNCTION(BlueprintPure, Category = "Revolver|Reload")
+	UAnimMontage* GetSingleRoundReloadMontage() const;
+
 	UFUNCTION(BlueprintPure, Category = "Revolver")
 	int32 GetFireSequence() const;
 
@@ -84,13 +110,32 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Revolver|Development", meta = (DevelopmentOnly))
 	ALuxCharacter* GetLastNonLethalHitForDevelopment() const;
 
+	UFUNCTION(BlueprintPure, Category = "Revolver|Development", meta = (DevelopmentOnly))
+	FString DescribeLastReloadResultForDevelopment() const;
+
 private:
 	UFUNCTION(Server, Reliable)
 	void ServerFire();
 
+	UFUNCTION(Server, Reliable)
+	void ServerOpenCylinder();
+
+	UFUNCTION(Server, Reliable)
+	void ServerCloseCylinder();
+
+	UFUNCTION(Server, Reliable)
+	void ServerCancelReload();
+
 	bool CanFire(const ALuxCharacter* EquippedCharacter, double ServerTimeSeconds) const;
+	bool CanManipulateCylinder(const ALuxCharacter* EquippedCharacter) const;
+	void ClearPendingRoundInsertion();
+	void CommitPendingRoundInsertion();
+	int32 FindNextEmptyChamber(int32 StartIndex) const;
 	bool IsValidChamberIndex(int32 ChamberIndex) const;
 	ALuxCharacter* TraceCharacter(const ALuxCharacter* EquippedCharacter) const;
+	bool TryCancelReload();
+	bool TryCloseCylinder();
+	bool TryOpenCylinder();
 	void ConsumeCurrentRoundAndAdvance();
 	void RefreshLoadedMask();
 
@@ -113,6 +158,23 @@ private:
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	int32 DryFireSequence = 0;
 
+	// Reload sequences are generic physical events and never identify the inserted round type.
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver|Reload", meta = (AllowPrivateAccess = "true"))
+	bool bRoundInsertionPending = false;
+
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver|Reload", meta = (AllowPrivateAccess = "true"))
+	int32 ReloadSequence = 0;
+
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver|Reload", meta = (AllowPrivateAccess = "true"))
+	int32 RoundInsertSequence = 0;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload")
+	TSoftObjectPtr<UAnimMontage> SingleRoundReloadMontage;
+
+	// Technical gate aligned to the first R21 insertion beat; 01-E may retime final playback.
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload", meta = (ClampMin = "0.05"))
+	float RoundInsertCommitDelaySeconds = 0.9f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Fire", meta = (ClampMin = "0.05"))
 	float MinimumFireIntervalSeconds = 0.25f;
 
@@ -122,4 +184,10 @@ private:
 	double LastFireServerTimeSeconds = -1.0;
 	FName LastFireResultForDevelopment = TEXT("None");
 	TWeakObjectPtr<ALuxCharacter> LastNonLethalHitForDevelopment;
+
+	uint8 ReloadChamberIndex = 0;
+	uint8 PendingRoundChamberIndex = ChamberCount;
+	ELuxRevolverRoundType PendingRoundType = ELuxRevolverRoundType::Empty;
+	FTimerHandle RoundInsertionTimer;
+	FName LastReloadResultForDevelopment = TEXT("None");
 };

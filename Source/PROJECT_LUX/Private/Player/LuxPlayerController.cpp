@@ -1,6 +1,8 @@
 #include "Player/LuxPlayerController.h"
 
 #include "Framework/LuxSessionSubsystem.h"
+#include "Player/LuxCharacter.h"
+#include "Weapons/LuxRevolver.h"
 
 namespace
 {
@@ -8,6 +10,13 @@ namespace
 	{
 		const UGameInstance* GameInstance = PlayerController ? PlayerController->GetGameInstance() : nullptr;
 		return GameInstance ? GameInstance->GetSubsystem<ULuxSessionSubsystem>() : nullptr;
+	}
+
+	ALuxRevolver* GetEquippedRevolver(const APlayerController* PlayerController)
+	{
+		const ALuxCharacter* LuxCharacter =
+			PlayerController ? Cast<ALuxCharacter>(PlayerController->GetPawn()) : nullptr;
+		return LuxCharacter ? LuxCharacter->GetEquippedRevolver() : nullptr;
 	}
 }
 
@@ -80,6 +89,58 @@ void ALuxPlayerController::LuxSessionStatus()
 		SessionSubsystem->IsOperationInProgress() ? TEXT("true") : TEXT("false"),
 		SessionSubsystem->GetSearchResults().Num()
 	);
+}
+
+void ALuxPlayerController::LuxLoadRound(FString RoundType)
+{
+#if UE_BUILD_SHIPPING
+	(void)RoundType;
+	return;
+#else
+	ELuxRevolverRoundType ParsedRoundType = ELuxRevolverRoundType::Empty;
+	if (RoundType.Equals(TEXT("Live"), ESearchCase::IgnoreCase))
+	{
+		ParsedRoundType = ELuxRevolverRoundType::Live;
+	}
+	else if (RoundType.Equals(TEXT("Blank"), ESearchCase::IgnoreCase))
+	{
+		ParsedRoundType = ELuxRevolverRoundType::Blank;
+	}
+	else if (RoundType.Equals(TEXT("Rubber"), ESearchCase::IgnoreCase))
+	{
+		ParsedRoundType = ELuxRevolverRoundType::Rubber;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("LuxLoadRound: expected Live, Blank, or Rubber."));
+		return;
+	}
+
+	if (HasAuthority())
+	{
+		if (ALuxRevolver* Revolver = GetEquippedRevolver(this))
+		{
+			// This development driver intentionally enters through the production insertion path.
+			Revolver->BeginRoundInsertion(ParsedRoundType);
+		}
+		return;
+	}
+
+	ServerLoadRoundForDevelopment(ParsedRoundType);
+#endif
+}
+
+void ALuxPlayerController::ServerLoadRoundForDevelopment_Implementation(ELuxRevolverRoundType RoundType)
+{
+#if UE_BUILD_SHIPPING
+	(void)RoundType;
+#else
+	if (ALuxRevolver* Revolver = GetEquippedRevolver(this))
+	{
+		// This development driver intentionally enters through the production insertion path.
+		Revolver->BeginRoundInsertion(RoundType);
+	}
+#endif
 }
 
 void ALuxPlayerController::HandleDevelopmentFindSessionsComplete(bool bWasSuccessful, int32 ResultCount)

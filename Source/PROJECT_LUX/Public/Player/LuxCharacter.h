@@ -43,6 +43,7 @@ private:
 	void ApplyDeathState();
 	void AttachEquippedRevolver();
 	void Fire(const FInputActionValue& Value);
+	void Reload(const FInputActionValue& Value);
 	void SpawnDefaultRevolver();
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
@@ -70,4 +71,7 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputAction> FireAction;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	TObjectPtr<UInputAction> ReloadAction;
 };

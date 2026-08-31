@@ -1,9 +1,11 @@
 #include "Weapons/LuxRevolver.h"
 
+#include "Animation/AnimMontage.h"
 #include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
 #include "Player/LuxCharacter.h"
+#include "TimerManager.h"
 
 namespace
 {
@@ -33,6 +35,9 @@ ALuxRevolver::ALuxRevolver()
 	SetReplicateMovement(false);
 
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	SingleRoundReloadMontage = TSoftObjectPtr<UAnimMontage>(FSoftObjectPath(
+		TEXT("/Game/RevolverFPGM/System/Animation/Reload/SingleBullet/AM_Reload_SingleBullet_Revolver.AM_Reload_SingleBullet_Revolver")
+	));
 
 	for (ELuxRevolverRoundType& RoundType : ChamberRoundTypes)
 	{
@@ -49,6 +54,9 @@ void ALuxRevolver::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ALuxRevolver, bCylinderOpen);
 	DOREPLIFETIME(ALuxRevolver, FireSequence);
 	DOREPLIFETIME(ALuxRevolver, DryFireSequence);
+	DOREPLIFETIME(ALuxRevolver, bRoundInsertionPending);
+	DOREPLIFETIME(ALuxRevolver, ReloadSequence);
+	DOREPLIFETIME(ALuxRevolver, RoundInsertSequence);
 }
 
 int32 ALuxRevolver::GetChamberCount() const
@@ -85,6 +93,102 @@ void ALuxRevolver::RequestFire()
 	}
 
 	ServerFire();
+}
+
+void ALuxRevolver::RequestOpenCylinder()
+{
+	if (HasAuthority())
+	{
+		TryOpenCylinder();
+		return;
+	}
+
+	ServerOpenCylinder();
+}
+
+void ALuxRevolver::RequestCloseCylinder()
+{
+	if (HasAuthority())
+	{
+		TryCloseCylinder();
+		return;
+	}
+
+	ServerCloseCylinder();
+}
+
+void ALuxRevolver::RequestCancelReload()
+{
+	if (HasAuthority())
+	{
+		TryCancelReload();
+		return;
+	}
+
+	ServerCancelReload();
+}
+
+bool ALuxRevolver::BeginRoundInsertion(ELuxRevolverRoundType RoundType)
+{
+	ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
+	const int32 EmptyChamberIndex = FindNextEmptyChamber(ReloadChamberIndex);
+	if (
+		!HasAuthority()
+		|| !CanManipulateCylinder(EquippedCharacter)
+		|| !bCylinderOpen
+		|| bRoundInsertionPending
+		|| RoundType <= ELuxRevolverRoundType::Empty
+		|| RoundType > ELuxRevolverRoundType::Rubber
+		|| !IsValidChamberIndex(EmptyChamberIndex)
+	)
+	{
+		LastReloadResultForDevelopment = TEXT("Rejected");
+		return false;
+	}
+
+	PendingRoundType = RoundType;
+	PendingRoundChamberIndex = static_cast<uint8>(EmptyChamberIndex);
+	bRoundInsertionPending = true;
+	++ReloadSequence;
+	LastReloadResultForDevelopment = TEXT("InsertPending");
+	ForceNetUpdate();
+
+	if (RoundInsertCommitDelaySeconds <= 0.0f || !GetWorld())
+	{
+		CommitPendingRoundInsertion();
+	}
+	else
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			RoundInsertionTimer,
+			this,
+			&ALuxRevolver::CommitPendingRoundInsertion,
+			RoundInsertCommitDelaySeconds,
+			false
+		);
+	}
+
+	return true;
+}
+
+bool ALuxRevolver::IsRoundInsertionPending() const
+{
+	return bRoundInsertionPending;
+}
+
+int32 ALuxRevolver::GetReloadSequence() const
+{
+	return ReloadSequence;
+}
+
+int32 ALuxRevolver::GetRoundInsertSequence() const
+{
+	return RoundInsertSequence;
+}
+
+UAnimMontage* ALuxRevolver::GetSingleRoundReloadMontage() const
+{
+	return SingleRoundReloadMontage.LoadSynchronous();
 }
 
 int32 ALuxRevolver::GetFireSequence() const
@@ -164,6 +268,11 @@ ALuxCharacter* ALuxRevolver::GetLastNonLethalHitForDevelopment() const
 	return HasAuthority() ? LastNonLethalHitForDevelopment.Get() : nullptr;
 }
 
+FString ALuxRevolver::DescribeLastReloadResultForDevelopment() const
+{
+	return HasAuthority() ? LastReloadResultForDevelopment.ToString() : TEXT("AuthorityOnly");
+}
+
 void ALuxRevolver::ServerFire_Implementation()
 {
 	ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
@@ -227,6 +336,21 @@ void ALuxRevolver::ServerFire_Implementation()
 	ForceNetUpdate();
 }
 
+void ALuxRevolver::ServerOpenCylinder_Implementation()
+{
+	TryOpenCylinder();
+}
+
+void ALuxRevolver::ServerCloseCylinder_Implementation()
+{
+	TryCloseCylinder();
+}
+
+void ALuxRevolver::ServerCancelReload_Implementation()
+{
+	TryCancelReload();
+}
+
 bool ALuxRevolver::CanFire(const ALuxCharacter* EquippedCharacter, double ServerTimeSeconds) const
 {
 	return HasAuthority()
@@ -241,9 +365,124 @@ bool ALuxRevolver::CanFire(const ALuxCharacter* EquippedCharacter, double Server
 		);
 }
 
+bool ALuxRevolver::CanManipulateCylinder(const ALuxCharacter* EquippedCharacter) const
+{
+	return HasAuthority()
+		&& EquippedCharacter
+		&& EquippedCharacter->GetEquippedRevolver() == this
+		&& !EquippedCharacter->IsDead();
+}
+
+void ALuxRevolver::ClearPendingRoundInsertion()
+{
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(RoundInsertionTimer);
+	}
+
+	bRoundInsertionPending = false;
+	PendingRoundType = ELuxRevolverRoundType::Empty;
+	PendingRoundChamberIndex = ChamberCount;
+}
+
+void ALuxRevolver::CommitPendingRoundInsertion()
+{
+	ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
+	const ELuxRevolverRoundType RoundType = PendingRoundType;
+	const int32 ChamberIndex = PendingRoundChamberIndex;
+	ClearPendingRoundInsertion();
+
+	if (
+		!CanManipulateCylinder(EquippedCharacter)
+		|| !bCylinderOpen
+		|| RoundType <= ELuxRevolverRoundType::Empty
+		|| RoundType > ELuxRevolverRoundType::Rubber
+		|| !IsValidChamberIndex(ChamberIndex)
+		|| ChamberRoundTypes[ChamberIndex] != ELuxRevolverRoundType::Empty
+	)
+	{
+		LastReloadResultForDevelopment = TEXT("Rejected");
+		ForceNetUpdate();
+		return;
+	}
+
+	ChamberRoundTypes[ChamberIndex] = RoundType;
+	ReloadChamberIndex = static_cast<uint8>((ChamberIndex + 1) % ChamberCount);
+	++RoundInsertSequence;
+	LastReloadResultForDevelopment = TEXT("Inserted");
+	RefreshLoadedMask();
+	ForceNetUpdate();
+}
+
+int32 ALuxRevolver::FindNextEmptyChamber(int32 StartIndex) const
+{
+	if (!IsValidChamberIndex(StartIndex))
+	{
+		return INDEX_NONE;
+	}
+
+	for (int32 Offset = 0; Offset < ChamberCount; ++Offset)
+	{
+		const int32 ChamberIndex = (StartIndex + Offset) % ChamberCount;
+		if (ChamberRoundTypes[ChamberIndex] == ELuxRevolverRoundType::Empty)
+		{
+			return ChamberIndex;
+		}
+	}
+
+	return INDEX_NONE;
+}
+
 bool ALuxRevolver::IsValidChamberIndex(int32 ChamberIndex) const
 {
 	return ChamberIndex >= 0 && ChamberIndex < ChamberCount;
+}
+
+bool ALuxRevolver::TryCancelReload()
+{
+	ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
+	if (!CanManipulateCylinder(EquippedCharacter) || !bCylinderOpen)
+	{
+		LastReloadResultForDevelopment = TEXT("Rejected");
+		return false;
+	}
+
+	ClearPendingRoundInsertion();
+	bCylinderOpen = false;
+	LastReloadResultForDevelopment = TEXT("Cancelled");
+	ForceNetUpdate();
+	return true;
+}
+
+bool ALuxRevolver::TryCloseCylinder()
+{
+	ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
+	if (!CanManipulateCylinder(EquippedCharacter) || !bCylinderOpen || bRoundInsertionPending)
+	{
+		LastReloadResultForDevelopment = TEXT("Rejected");
+		return false;
+	}
+
+	bCylinderOpen = false;
+	LastReloadResultForDevelopment = TEXT("Closed");
+	ForceNetUpdate();
+	return true;
+}
+
+bool ALuxRevolver::TryOpenCylinder()
+{
+	ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
+	if (!CanManipulateCylinder(EquippedCharacter) || bCylinderOpen || bRoundInsertionPending)
+	{
+		LastReloadResultForDevelopment = TEXT("Rejected");
+		return false;
+	}
+
+	bCylinderOpen = true;
+	ReloadChamberIndex = CurrentChamberIndex;
+	LastReloadResultForDevelopment = TEXT("Opened");
+	ForceNetUpdate();
+	return true;
 }
 
 ALuxCharacter* ALuxRevolver::TraceCharacter(const ALuxCharacter* EquippedCharacter) const
