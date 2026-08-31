@@ -616,6 +616,62 @@ Phase 00 전체를 5~6인 실제 목표 규모에서 검증하고 닫는다.
 - Steam 원격 2인 이상 접속 성공
 - 최종 Main Menu/Lobby UX가 없어도 실제 인터넷 멀티 테스트 가능
 
+### 실행 결과 - 2026-08-31 (Local Integration Complete / Steam Remote Deferred)
+
+2 Player 회귀:
+
+- Listen Server 1 + Client 1 PIE에서 양쪽 Spawn / Possess / 이동 / 원격 복제를 재검증
+- Host 604.06 cm, Client 662.13 cm 이동 및 양쪽 원격 Proxy 50 cm 이상 이동 확인
+- 이동 정지 후 원격 Proxy 오차 0.002 cm 미만으로 수렴하고 Remote Locomotion 재생 확인
+
+6 Player PIE:
+
+- 동일 프로세스 Listen Server 1 + Client 5, 총 PIE World 6개 생성
+- 모든 World에서 `LuxCharacter` 6개와 `LuxPlayerState` 6개 확인
+- Server `GameState.PlayerArray`에 `LuxPlayerState` 6개 존재 확인
+- 여섯 Local Controller 모두 `ALuxCharacter` Possess 확인
+- Spawn 최소 중심 간격 68.0004 cm, Capsule 지름 68 cm로 Spawn Overlap 없음
+- Test Facility의 실제 PlayerStart 6개는 최소 260 cm 간격 유지
+- 여섯 Client World에 각각 Move 입력을 주입하고 Local Pawn 전원 84.06 cm 이상 이동
+- 여섯 이동이 Server Authority 위치에 모두 84.06 cm 이상 반영되고 최대 수렴 오차 0.01 cm 미만
+- Host 시야에서 Remote Third-Person Character 5개와 시설 조명 / 그림자 / Lumen 표현 확인
+- 6개 렌더링 World를 한 Editor Process에서 실행한 Smoke 측정은 평균 16.95 ms, P95 19.44 ms, 최대 67.32 ms
+- 위 수치는 개발 PC의 Editor 통합 부하 확인용이며 Shipping 성능 기준으로 사용하지 않음
+
+Test Facility 노출 조정:
+
+- 기존 대표 캡처에서 천장과 Character 피부가 클리핑되는 과노출을 확인
+- 기존 Point Light 구조는 유지하고 Room Light Intensity를 1000에서 100, Corridor Light를 750에서 75로 조정
+- Test Facility 전용 Unbound Post Process Volume에 Exposure Compensation -1.5 적용
+- 전역 렌더링 설정이나 후속 실제 Map의 노출 정책은 변경하지 않음
+- 조정 후 Character 얼굴, 바닥, 벽, 천장 Detail과 어두운 구역 대비가 함께 유지되는 캡처 확인
+
+Standalone / Multi-process:
+
+- Online Subsystem `NULL`과 동일 Session API로 별도 Game Process Host / Client 실행
+- 첫 Client가 진행 중 Session을 검색하고 Join한 뒤 Test Facility에서 Character 2개와 PlayerState 2개 확인
+- 첫 Client 정상 종료 후 Host가 Connection을 닫고 Client Connection을 제거했으며 치명 오류 없음
+- Session 시작 약 20초 후 새 Client를 투입해 Join In Progress 검색 / Join / Welcome 성공
+- JIP Client에서 Character 2개와 서로 다른 ID의 `LuxPlayerState` 2개 확인
+- Host 종료 시 JIP Client가 `Host closed the connection`을 수신하고 NetDriver를 종료한 뒤 Entry Map으로 복귀
+- Host 종료 후에도 Client Game Loop가 예약된 `quit` 명령까지 응답해 hanging 없음 확인
+
+최종 회귀:
+
+- `PROJECT_LUXEditor Win64 Development` 빌드 성공
+- Character Mesh / AnimBP / Retarget Animation / BlendSpace 로드 및 연결 검증 통과
+- `/Game/LUX/Maps/L_FPS_TestFacility` 재로드 성공
+- PlayerStart 6개, Point Light 5개, Test Facility Post Process Volume 1개 확인
+- Map Check 0 Error / 0 Warning
+- Gameplay HUD / Lobby UI / Matchmaking UI / Ready / Role / Revolver를 추가하지 않음
+- 00-F 검증 지원 코드는 `Saved/Codex`에만 두고 Runtime Source에 테스트 전용 구조를 추가하지 않음
+
+후속 외부 검증:
+
+- 실제 Steam 계정 / PC / App ID가 준비되지 않아 Steam 원격 2인 이상 검증은 실행하지 않음
+- 2026-08-30 결정에 따라 Steam 원격 검증은 후속 통합 검증으로 유지하고, NULL/LAN 로컬 결과를 기준으로 다음 Phase 진행을 허용함
+- 따라서 현재 상태는 Local Phase 00 완료이며 Steam 실환경 검증 완료를 의미하지 않음
+
 ### Phase 완료 커밋
 
 권장 커밋 메시지:
@@ -984,25 +1040,25 @@ PIE에서만 동작하고 Standalone에서 실패하는 코드를 허용하지 �
 
 # 12. Completion Checklist
 
-- [ ] C++ Framework classes 생성
-- [ ] Enhanced Input Move/Look
-- [ ] Listen Server Session Create
-- [ ] Find / Join
-- [ ] Destroy
-- [ ] 6 Player Spawn
-- [ ] PlayerState 확인
-- [ ] CharacterMovement replication
-- [ ] First Person Camera
-- [ ] Remote Third Person Character
-- [ ] Big Star Station 검증
-- [ ] Character Asset 검증
-- [ ] Animation Starter Pack retarget
-- [ ] 2 Player 테스트 통과
-- [ ] 6 Player 테스트 통과
-- [ ] Join In Progress 테스트 통과
-- [ ] Host Exit 테스트 통과
-- [ ] Gameplay HUD 없음
-- [ ] Phase 01 Revolver 부착 지점 준비
+- [x] C++ Framework classes 생성
+- [x] Enhanced Input Move/Look
+- [x] Listen Server Session Create
+- [x] Find / Join
+- [x] Destroy
+- [x] 6 Player Spawn
+- [x] PlayerState 확인
+- [x] CharacterMovement replication
+- [x] First Person Camera
+- [x] Remote Third Person Character
+- [x] Big Star Station 검증
+- [x] Character Asset 검증
+- [x] Animation Starter Pack retarget
+- [x] 2 Player 테스트 통과
+- [x] 6 Player 테스트 통과
+- [x] Join In Progress 테스트 통과
+- [x] Host Exit 테스트 통과
+- [x] Gameplay HUD 없음
+- [x] Phase 01 Revolver 부착 지점 준비
 
 ---
 
@@ -1010,24 +1066,38 @@ PIE에서만 동작하고 Standalone에서 실패하는 코드를 허용하지 �
 
 ## Result
 
-미작성.
+Phase 00의 로컬 멀티플레이 기반을 완성했다. 1인칭 Move / Look, Remote Third-Person Character와 Locomotion, UI 독립 Session Backend, 6인 Spawn / Possess / PlayerState / 이동 복제, JIP, Client Disconnect, Host Exit가 UE 5.8 PIE와 Standalone 환경에서 동작한다.
+
+Steam 실환경 검증은 실행하지 않았으므로 Steam 원격 완료로 기록하지 않는다.
 
 ## Status
 
-Planned.
+**Local Complete / Steam Remote Deferred**
 
 ## Commit
 
-미작성.
+Checkpoint 검수 후 `26/08/31 Project Foundation 10 - Six Player Integration QA`로 기록 예정.
 
 ## Implemented
 
-미작성.
+- 최소 C++ Framework와 서버 권한 경계
+- Enhanced Input 기반 1인칭 Move / Look
+- Casual 01 Third-Person Mesh와 Animation Starter Pack Retarget Locomotion
+- Online Subsystem 기반 Create / Find / Join / Destroy와 Listen / Client Travel
+- Runtime `ActiveSessionName` 및 UI 독립 개발용 호출 경로
+- 6 PlayerStart Test Facility와 6인 통합 검증
+- Test Facility Point Light / Exposure 조정
+- 2인 회귀, 6인 PIE, Standalone JIP / Disconnect / Host Exit 검증
 
 ## Changed from Plan
 
-미작성.
+- Steam 원격 검증은 실제 App ID와 서로 다른 Steam 계정 / PC가 없어 사용자 결정으로 후속 통합 검증에 이관
+- 로컬 6인 검증은 동일 프로세스 PIE 6개로 수행하고, 실제 Session 수명주기는 별도 Standalone Process로 분리 검증
+- Casual 01은 4개 Premade와 Modular Part로 외형 후보 수를 확인했지만 Phase 00 Runtime Character는 `MESH_PC_00` 하나만 사용
+- 00-F 대표 캡처에서 발견한 Test Facility 과노출을 기존 Point Light 값과 Map 전용 Exposure Compensation 조정으로 수정
 
 ## Remaining
 
-미작성.
+- Steam Online Subsystem / Steam NetDriver 설정 후 실제 원격 2인 이상 Host / Join / 이동 / PlayerState / Disconnect 검증
+- Character 외형 선택 및 네트워크 동기화는 후속 Character Customization 범위에서 구현
+- Main Menu / 3D Lobby / Invite / Matchmaking UX는 `LobbyPlan`과 후속 Phase에서 같은 Session Backend에 연결

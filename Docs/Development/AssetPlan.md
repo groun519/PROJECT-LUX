@@ -79,12 +79,21 @@ Phase 00 검증:
 - 가까운 1인칭 시점에서 텍스처/메시 품질
 - 조명 Mesh를 향후 파괴 가능한 Actor로 분리하기 쉬운지
 
+Phase 00 결과:
+
+- Big Star 모듈 43개로 `/Game/LUX/Maps/L_FPS_TestFacility` 구성 및 UE 5.8 로드 성공
+- PlayerStart 6개 최소 260 cm 간격, 핵심 Floor / Wall / Corridor Mesh Collision 확인
+- 6 Player PIE에서 원격 Character 5개 표시와 시설 동선 / 그림자 / Lumen 표현 확인
+- 6개 렌더링 World 단일 Editor Process Smoke 측정 평균 16.95 ms, P95 19.44 ms
+- 대표 시야 과노출을 해결하기 위해 프로젝트 소유 Test Facility의 Point Light Intensity와 Map 전용 Exposure Compensation만 조정
+- 원본 Big Star Station 에셋은 이동하거나 수정하지 않음
+
 채택 기준:
 
 - 위 조건에 치명적 문제가 없으면 시설 기본 Kit 1순위로 유지
 - 전체 Demo Map을 그대로 쓰지 않고, 실제 게임에 사용할 모듈로 Test Facility를 구성
 
-현재 상태: **Primary Candidate / Phase 00 Validation**
+현재 상태: **Adopt for Prototype / Phase 00 Validated**
 
 ---
 
@@ -124,12 +133,19 @@ Phase 00 검증:
 - 1인칭 카메라에서 자기 몸 일부를 사용할지 여부와 호환
 - 타 플레이어 3인칭 표시 품질
 
+Phase 00 결과:
+
+- UE 5.8에서 `MESH_PC_00` 로드 및 Animation Starter Pack Retarget Skeleton 연결 성공
+- 2인 및 6인 PIE에서 OwnerNoSee와 Remote Third-Person 표시, 복제 이동, Locomotion 확인
+- Premade Character 4개와 Modular Part 구성을 확인해 5~6인 외형 후보 조합 가능
+- Phase 00 Runtime은 네트워크 기반 검증을 위해 `MESH_PC_00` 하나만 사용하며 외형 선택 / 동기화는 후속 범위로 유지
+
 채택 기준:
 
 - 기술적으로 안정적이고 아트 방향에 맞으면 시민 기본 Character Kit로 사용
 - 시각 방향 또는 다양성 문제가 크면 Phase 00 안에서 대체 후보를 확정한 뒤 완료
 
-현재 상태: **Primary Owned Character Candidate / Phase 00 Validation**
+현재 상태: **Adopt for Prototype / Phase 00 Validated**
 
 ---
 
@@ -154,7 +170,13 @@ https://www.fab.com/listings/98ff449d-79db-4f54-9303-75486c4fb9d9
 - Phase 01 Third-Person Revolver upper-body animation과 lower-body locomotion blend의 기반
 - 필요 애니메이션은 UE5 IK Retargeter로 프로젝트 캐릭터에 맞춤
 
-현재 상태: **Use / Phase 00~01**
+Phase 00 결과:
+
+- Idle / Forward / Backward / Left / Right 5종을 Casual 01 Skeleton으로 Retarget
+- 6 Sample 2D BlendSpace와 최소 AnimBP로 Speed / Direction Locomotion 구성
+- 2인 및 6인 PIE에서 Remote Character 이동과 Animation 갱신 확인
+
+현재 상태: **Use / Phase 00 Validated / Phase 01 Foundation**
 
 ---
 
