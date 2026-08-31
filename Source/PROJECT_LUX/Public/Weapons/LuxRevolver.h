@@ -8,6 +8,9 @@
 class ALuxCharacter;
 class ALuxRevolver;
 class UAnimMontage;
+class UNiagaraSystem;
+class USkeletalMeshComponent;
+class USoundBase;
 
 UENUM(BlueprintType)
 enum class ELuxRevolverRoundType : uint8
@@ -55,6 +58,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Revolver")
 	void RequestFire();
+
+	void AttachFirstPersonVisualTo(USkeletalMeshComponent* FirstPersonArms);
 
 	UFUNCTION(BlueprintCallable, Category = "Revolver|Reload")
 	void RequestOpenCylinder();
@@ -114,6 +119,21 @@ public:
 	FString DescribeLastReloadResultForDevelopment() const;
 
 private:
+	UFUNCTION()
+	void OnRep_CylinderOpen(bool bWasCylinderOpen);
+
+	UFUNCTION()
+	void OnRep_FireSequence();
+
+	UFUNCTION()
+	void OnRep_DryFireSequence();
+
+	UFUNCTION()
+	void OnRep_ReloadSequence();
+
+	UFUNCTION()
+	void OnRep_RoundInsertSequence();
+
 	UFUNCTION(Server, Reliable)
 	void ServerFire();
 
@@ -131,7 +151,14 @@ private:
 	void ClearPendingRoundInsertion();
 	void CommitPendingRoundInsertion();
 	int32 FindNextEmptyChamber(int32 StartIndex) const;
+	bool IsLocallyPresented() const;
 	bool IsValidChamberIndex(int32 ChamberIndex) const;
+	void PlayCylinderPresentation(bool bNowOpen);
+	void PlayFirePresentation(bool bDryFire);
+	void PlayReloadPresentation();
+	void PlayRoundInsertPresentation();
+	void PlaySoundForOwner(USoundBase* Sound, FName SocketName = NAME_None) const;
+	void StopReloadPresentation();
 	ALuxCharacter* TraceCharacter(const ALuxCharacter* EquippedCharacter) const;
 	bool TryCancelReload();
 	bool TryCloseCylinder();
@@ -142,34 +169,70 @@ private:
 	// Exact round types intentionally remain server-only and are never registered for replication.
 	TStaticArray<ELuxRevolverRoundType, ChamberCount> ChamberRoundTypes;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Revolver|Presentation", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> FirstPersonWeaponMesh;
+
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	uint8 LoadedMask = 0;
 
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	uint8 CurrentChamberIndex = 0;
 
-	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(ReplicatedUsing = OnRep_CylinderOpen, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	bool bCylinderOpen = false;
 
 	// Generic sequences support later presentation without revealing Live, Blank, or Rubber.
-	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(ReplicatedUsing = OnRep_FireSequence, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	int32 FireSequence = 0;
 
-	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(ReplicatedUsing = OnRep_DryFireSequence, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	int32 DryFireSequence = 0;
 
 	// Reload sequences are generic physical events and never identify the inserted round type.
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver|Reload", meta = (AllowPrivateAccess = "true"))
 	bool bRoundInsertionPending = false;
 
-	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver|Reload", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(ReplicatedUsing = OnRep_ReloadSequence, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver|Reload", meta = (AllowPrivateAccess = "true"))
 	int32 ReloadSequence = 0;
 
-	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver|Reload", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(ReplicatedUsing = OnRep_RoundInsertSequence, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver|Reload", meta = (AllowPrivateAccess = "true"))
 	int32 RoundInsertSequence = 0;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload")
 	TSoftObjectPtr<UAnimMontage> SingleRoundReloadMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<UAnimMontage> WeaponSingleRoundReloadMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<UAnimMontage> AimFireMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<UAnimMontage> WeaponAimFireMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<UAnimMontage> HipFireMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<UAnimMontage> WeaponHipFireMontage;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<UNiagaraSystem> MuzzleFlashSystem;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<USoundBase> FireSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<USoundBase> DryFireSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<USoundBase> CylinderOpenSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<USoundBase> CylinderCloseSound;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<USoundBase> RoundInsertSound;
 
 	// Technical gate aligned to the first R21 insertion beat; 01-E may retime final playback.
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload", meta = (ClampMin = "0.05"))

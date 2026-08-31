@@ -5,9 +5,11 @@
 #include "LuxCharacter.generated.h"
 
 class UCameraComponent;
+class UAnimMontage;
 class UInputAction;
 class UInputMappingContext;
 class USceneComponent;
+class USkeletalMeshComponent;
 class ALuxRevolver;
 struct FInputActionValue;
 
@@ -20,6 +22,7 @@ public:
 	ALuxCharacter();
 
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaSeconds) override;
 	virtual void Destroyed() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void PawnClientRestart() override;
@@ -31,9 +34,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "State")
 	bool IsDead() const;
 
+	UFUNCTION(BlueprintPure, Category = "Revolver")
+	bool IsAiming() const;
+
+	USkeletalMeshComponent* GetFirstPersonArms() const;
+	void PlayFirstPersonMontage(UAnimMontage* Montage, float PlayRate = 1.0f);
+	void StopFirstPersonMontages(float BlendOutSeconds = 0.15f);
+
 	bool Die();
 
 private:
+	UFUNCTION(Server, Reliable)
+	void ServerSetAiming(bool bNewAiming);
+
 	UFUNCTION()
 	void OnRep_EquippedRevolver();
 
@@ -42,6 +55,10 @@ private:
 
 	void ApplyDeathState();
 	void AttachEquippedRevolver();
+	void AimStarted(const FInputActionValue& Value);
+	void AimStopped(const FInputActionValue& Value);
+	void SetAiming(bool bNewAiming);
+	void UpdateFirstPersonPresentation(float DeltaSeconds);
 	void Fire(const FInputActionValue& Value);
 	void Reload(const FInputActionValue& Value);
 	void SpawnDefaultRevolver();
@@ -51,6 +68,9 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "View", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCameraComponent> FirstPersonCamera;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "View", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> FirstPersonArms;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USceneComponent> RevolverAttachPoint;
 
@@ -59,6 +79,18 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_IsDead, VisibleInstanceOnly, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
 	bool bIsDead = false;
+
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
+	bool bIsAiming = false;
+
+	UPROPERTY(EditDefaultsOnly, Category = "View", meta = (ClampMin = "30.0", ClampMax = "120.0"))
+	float DefaultFieldOfView = 90.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "View", meta = (ClampMin = "30.0", ClampMax = "120.0"))
+	float AimFieldOfView = 65.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "View", meta = (ClampMin = "0.1"))
+	float AimInterpolationSpeed = 12.0f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputMappingContext> PlayerMappingContext;
@@ -74,4 +106,7 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	TObjectPtr<UInputAction> ReloadAction;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	TObjectPtr<UInputAction> AimAction;
 };

@@ -393,6 +393,19 @@ HUD 없이 실제 게임에서 사용할 1인칭 리볼버 조작 품질을 완�
 - HUD 없음
 - Local Fire 반응 지연이 과도하지 않음
 
+### 실행 결과 - 2026-09-01 (Ready for Review)
+
+- R21 FP Arms와 Revolver visual을 Local owner 전용 컴포넌트로 구성하고 Collision / Shadow를 비활성화
+- 원본 R21 런타임 기준 Arms transform과 전용 손 소켓 `38`을 적용해 Camera / Sight 중심 정렬 완료
+- 우클릭 `IA_Aim`과 Server 검증 상태를 연결하고 90° → 65° ADS FOV 보간 및 R21 Aim 상태 연동
+- Fire는 공개 LoadedMask만 사용한 Local prediction cosmetic으로 재생하고 정확한 Live / Blank / Rubber 판정은 계속 Server-only로 유지
+- Aim / Hip Fire, Single Round Reload의 Arms / Weapon montage를 함께 재생하고 Dry Fire, Cylinder, Round Insert SFX 연결
+- Live / Blank / Rubber 공통 Fire SFX와 Niagara Muzzle Flash를 사용해 탄종을 외부 연출만으로 구분하지 않음
+- Crosshair 및 Gameplay HUD를 추가하지 않고 실제 Front Sight 조준이 가능한 화면 정렬 확인
+- UE 5.8 Development Editor 빌드, Map Check, 3 Player PIE, 기존 Client → Host 사격 회귀 검증 통과
+- Remote Third-Person presentation은 계획대로 01-F 범위에 유지
+- 판정: **01-E 검수 기준 통과 / 01-F 진행 가능**
+
 ### 커밋 게이트
 
 권장 커밋 메시지:
@@ -1184,8 +1197,8 @@ Live / Blank / Rubber / Empty / Live / Blank
 - [x] bIsDead
 - [x] Death replication
 - [x] Dead player fire blocked
-- [ ] Aim input
-- [ ] No crosshair
+- [x] Aim input
+- [x] No crosshair
 - [x] Debug round insertion driver
 - [x] Reload production API
 
@@ -1194,12 +1207,12 @@ Live / Blank / Rubber / Empty / Live / Blank
 - [x] R21 Personal 라이선스 구매 완료
 - [x] R21 UE 5.8 import
 - [x] Revolver mesh 검증
-- [ ] FP animations 연결
+- [x] FP animations 연결
 - [ ] TP animations 연결
 - [ ] lower-body layer 연결
-- [ ] Fire SFX
-- [ ] Reload/mechanical SFX
-- [ ] Muzzle Flash
+- [x] Fire SFX
+- [x] Reload/mechanical SFX
+- [x] Muzzle Flash
 - [ ] Impact/Blood candidate 검증
 
 ## Multiplayer
@@ -1212,7 +1225,7 @@ Live / Blank / Rubber / Empty / Live / Blank
 - [x] Dry Fire 검증
 - [x] Chamber secrecy 검증
 - [ ] 6 Player 테스트
-- [ ] HUD 없음
+- [x] HUD 없음
 
 ---
 
