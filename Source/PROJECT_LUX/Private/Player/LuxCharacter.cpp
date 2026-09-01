@@ -165,7 +165,11 @@ USkeletalMeshComponent* ALuxCharacter::GetFirstPersonArms() const
 	return FirstPersonArms;
 }
 
-void ALuxCharacter::PlayFirstPersonMontage(UAnimMontage* Montage, float PlayRate)
+void ALuxCharacter::PlayFirstPersonMontage(
+	UAnimMontage* Montage,
+	float PlayRate,
+	float StartPositionSeconds
+)
 {
 	if (!IsLocallyControlled() || !Montage || !FirstPersonArms)
 	{
@@ -174,11 +178,20 @@ void ALuxCharacter::PlayFirstPersonMontage(UAnimMontage* Montage, float PlayRate
 
 	if (UAnimInstance* AnimInstance = FirstPersonArms->GetAnimInstance())
 	{
-		AnimInstance->Montage_Play(Montage, PlayRate);
+		AnimInstance->Montage_Play(
+			Montage,
+			PlayRate,
+			EMontagePlayReturnType::MontageLength,
+			StartPositionSeconds
+		);
 	}
 }
 
-void ALuxCharacter::PlayThirdPersonUpperBodyAnimation(UAnimSequenceBase* Animation, float PlayRate)
+void ALuxCharacter::PlayThirdPersonUpperBodyAnimation(
+	UAnimSequenceBase* Animation,
+	float PlayRate,
+	float StartPositionSeconds
+)
 {
 	if (IsLocallyControlled() || !Animation)
 	{
@@ -193,7 +206,9 @@ void ALuxCharacter::PlayThirdPersonUpperBodyAnimation(UAnimSequenceBase* Animati
 			0.1f,
 			0.15f,
 			PlayRate,
-			1
+			1,
+			-1.0f,
+			StartPositionSeconds
 		);
 	}
 }

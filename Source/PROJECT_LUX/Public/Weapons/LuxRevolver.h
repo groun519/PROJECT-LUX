@@ -140,6 +140,9 @@ private:
 	};
 
 	UFUNCTION()
+	void OnRep_LoadedMask();
+
+	UFUNCTION()
 	void OnRep_CylinderOpen(bool bWasCylinderOpen);
 
 	UFUNCTION()
@@ -178,19 +181,20 @@ private:
 	bool IsLocallyPresented() const;
 	bool IsRemotelyPresented() const;
 	bool IsValidChamberIndex(int32 ChamberIndex) const;
-	void PauseReloadPresentation();
+	void HoldCylinderOpenPresentation();
 	void PlayCylinderPresentation(bool bNowOpen);
 	void PlayFirePresentation(bool bDryFire);
-	void PlayReloadPresentation();
+	void PlayReloadPresentation(float StartPositionSeconds = 0.0f);
 	void PlayRoundInsertPresentation();
 	void PlaySoundForOwner(USoundBase* Sound, FName SocketName = NAME_None) const;
 	ELocalFirePrediction PredictLocalFire(double LocalTimeSeconds);
 	void ResolvePresentationAssets();
 	bool ResolveServerFire(bool& bOutDryFire);
-	void ScheduleCylinderOpenPosePause();
+	void ScheduleCylinderOpenPoseHold(float DelaySeconds);
+	void SpawnMuzzleFlashFor(USkeletalMeshComponent* WeaponMesh, float Scale) const;
 	void PlayThirdPersonCylinderPresentation(bool bNowOpen);
 	void PlayThirdPersonFirePresentation(bool bDryFire);
-	void PlayThirdPersonReloadPresentation();
+	void PlayThirdPersonReloadPresentation(float StartPositionSeconds = 0.0f);
 	void PlayThirdPersonRoundInsertPresentation();
 	void PlaySoundForRemote(USoundBase* Sound) const;
 	void StopReloadPresentation();
@@ -201,6 +205,7 @@ private:
 	bool TryOpenCylinder();
 	void ConsumeCurrentRoundAndAdvance();
 	void RefreshLoadedMask();
+	void RefreshBulletVisuals();
 
 	// Exact round types intentionally remain server-only and are never registered for replication.
 	TStaticArray<ELuxRevolverRoundType, ChamberCount> ChamberRoundTypes;
@@ -211,7 +216,7 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Revolver|Presentation", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USkeletalMeshComponent> ThirdPersonWeaponMesh;
 
-	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(ReplicatedUsing = OnRep_LoadedMask, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	uint8 LoadedMask = 0;
 
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
@@ -268,9 +273,6 @@ private:
 	TSoftObjectPtr<UNiagaraSystem> MuzzleFlashSystem;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
-	TSoftObjectPtr<USoundBase> FireSound;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
 	TSoftObjectPtr<USoundBase> DryFireSound;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
@@ -278,9 +280,6 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
 	TSoftObjectPtr<USoundBase> CylinderCloseSound;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
-	TSoftObjectPtr<USoundBase> RoundInsertSound;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ResolvedSingleRoundReloadMontage;
@@ -313,9 +312,6 @@ private:
 	TObjectPtr<UNiagaraSystem> ResolvedMuzzleFlashSystem;
 
 	UPROPERTY(Transient)
-	TObjectPtr<USoundBase> ResolvedFireSound;
-
-	UPROPERTY(Transient)
 	TObjectPtr<USoundBase> ResolvedDryFireSound;
 
 	UPROPERTY(Transient)
@@ -324,19 +320,34 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<USoundBase> ResolvedCylinderCloseSound;
 
-	UPROPERTY(Transient)
-	TObjectPtr<USoundBase> ResolvedRoundInsertSound;
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload", meta = (ClampMin = "0.1"))
+	float ReloadPresentationPlayRate = 1.0f;
 
-	// Technical gate aligned to the first R21 insertion beat; 01-E may retime final playback.
+	// R21's first visible single-round insertion starts here and lands at 2.88 seconds.
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload", meta = (ClampMin = "0.0"))
+	float RoundInsertMontageStartSeconds = 2.2f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload", meta = (ClampMin = "0.05"))
-	float RoundInsertCommitDelaySeconds = 0.9f;
+	float RoundInsertMontageCommitSeconds = 2.88f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload", meta = (ClampMin = "0.0"))
+	float RoundInsertSettleDelaySeconds = 0.18f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Fire", meta = (ClampMin = "0.05"))
 	float MinimumFireIntervalSeconds = 0.25f;
 
-	// R21's Door and Drum reach their stable open pose at 0.75 seconds.
+	// Keep the cylinder open without leaving the hands frozen mid-insertion.
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation", meta = (ClampMin = "0.0"))
-	float CylinderOpenPoseDelaySeconds = 0.75f;
+	float CylinderOpenPosePositionSeconds = 0.8f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation", meta = (ClampMin = "0.01"))
+	float MuzzleFlashDurationSeconds = 0.08f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation", meta = (ClampMin = "0.01"))
+	float FirstPersonMuzzleFlashScale = 0.35f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation", meta = (ClampMin = "0.01"))
+	float ThirdPersonMuzzleFlashScale = 0.35f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Fire", meta = (ClampMin = "100.0"))
 	float TraceRange = 10000.0f;

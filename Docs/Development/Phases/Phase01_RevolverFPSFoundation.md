@@ -1,6 +1,6 @@
 # Phase 01 - Revolver FPS Foundation
 
-> 상태: In Progress - 01-E Correction Ready for Review
+> 상태: In Progress - 01-F Presentation Correction Ready for Review
 > 선행 Phase: Phase 00 - Multiplayer Foundation  
 > 목표: PROJECT LUX의 유일한 기본 총기인 리볼버를 서버 권한 멀티플레이 구조로 구현하고, 실탄/공탄/고무탄의 숨겨진 탄종 구조와 즉사 규칙까지 검증한다.
 
@@ -401,10 +401,10 @@ HUD 없이 실제 게임에서 사용할 1인칭 리볼버 조작 품질을 완�
 - Owner의 즉시 입력 상태와 Server의 Remote 표시 상태를 분리하고 `COND_SkipOwner`를 적용해 지연 복제로 인한 ADS 되감기를 제거
 - R21 AnimBP의 유효한 AnimGraph만 프로젝트 소유 `ABP_LuxFirstPerson`으로 복제하고, 데모 Character Cast EventGraph를 제거한 뒤 typed `ULuxFirstPersonAnimInstance`로 Aim을 전달
 - Fire는 공개 LoadedMask만 사용하는 Local prediction과 요청 ID 기반 Server 확인을 연결해 수락·거절 시 Owner 연출이 누락되거나 중복되지 않도록 보정하고, 정확한 Live / Blank / Rubber 판정은 계속 Server-only로 유지
-- Aim / Hip Fire, Single Round Reload의 Arms / Weapon montage를 함께 재생하고 Dry Fire, Cylinder, Round Insert SFX 연결
-- R21 Door / Drum의 안정된 Open pose를 0.75초 지점에서 유지하고 Insert 후 다시 고정하며 Close / Cancel / Death에서 Arms와 Weapon montage를 함께 정리
-- Live / Blank / Rubber 공통 Fire SFX와 Niagara Muzzle Flash를 사용해 탄종을 외부 연출만으로 구분하지 않음
-- R21 `38` 및 `weapon_r_muzzle` 소켓이 FP Arms 소유임을 검증하고, 모든 Soft asset은 `BeginPlay`에서 한 번만 resolve해 입력 hot path의 동기 로드를 제거
+- Aim / Hip Fire, Single Round Reload의 Arms / Weapon montage를 함께 재생하고 Dry Fire와 Cylinder SFX를 연결하며 Fire / Round Insert는 R21 Weapon montage 내장 Notify를 단일 재생원으로 사용
+- R21 Door / Drum의 안정된 Open pose를 montage 0.8초 지점에서 유지하고 실제 Insert 구간 재생 후 다시 고정하며 Close / Cancel / Death에서 Arms와 Weapon montage를 함께 정리
+- Live / Blank / Rubber 공통 Fire SFX와 0.08초 Niagara Muzzle Flash를 사용해 탄종을 외부 연출만으로 구분하지 않음
+- R21 `38` 및 `weapon_r_muzzle` 소켓이 FP Arms 소유이고 Revolver Mesh에는 Muzzle Socket이 없음을 검증해, Arms Muzzle을 Weapon Component-space로 보정한 1P / 3P 공통 총구 기준점을 사용
 - Character presentation Tick은 Local owner로 제한하고 사망 시 Aim, FOV, FP 표시와 진행 중 연출을 즉시 정리
 - Crosshair 및 Gameplay HUD를 추가하지 않고 실제 Front Sight 조준이 가능한 화면 정렬 확인
 - UE 5.8 Development Editor 빌드와 Map Check 0 Error / 0 Warning 통과
@@ -507,7 +507,19 @@ Third-Person Final Pose
 
 결론: 현재 R21 재사용 구조로 01 범위의 멀티플레이 프로토타입 품질은 충족한다. 별도 Third-Person Animation Pack 구매는 필요하지 않으며, 향후 캐릭터 폴리시 단계에서 왼팔 보조 자세와 세부 손가락 접촉만 선택적으로 개선한다.
 
-판정: **01-F 완료 / Ready for Review**
+### Presentation 수정 기록 - 2026-09-01
+
+- R21 Weapon Fire montage에 포함된 Trigger / Fire Sound Notify와 명시적 Fire SFX가 겹치던 경로를 제거하고 montage Notify만 단일 재생원으로 유지
+- 무한 Emitter 상태인 `NS_MuzzleFlash`를 1P / 3P별 독립 Instance로 생성하고 0.08초 뒤 즉시 비활성화·제거
+- Revolver Mesh에 Muzzle Socket이 없으므로 R21 Arms의 `weapon_r_muzzle`을 실제 장착 Weapon Component-space로 보정한 위치·회전을 양쪽 Presentation에 적용
+- Replicated `LoadedMask`의 RepNotify에서 `Bullet_1`~`Bullet_6` Bone 가시성을 갱신해 빈 약실, 한 발 삽입, 발사 후 빈 약실을 1P / 3P 모두 동일하게 표시
+- `LuxLoadRound`가 Open pose 중간에서 멈추지 않도록 montage 2.2초의 실제 삽입 동작부터 재생하고 2.88초 삽입 박자에 Server Commit한 뒤 0.8초 Open pose로 복귀
+- 명시적 Round Insert SFX를 제거하고 실제 삽입 구간의 R21 Weapon montage Notify를 사용해 동작과 소리를 같은 박자에 재생
+- UE 5.8 Development Game / Editor 빌드 통과
+- 2 Player Listen Server 50ms / 100ms에서 삽입 구간 진행, Open pose 복귀, LoadedMask와 양쪽 Bullet Bone 표시 수렴, 1P / 3P 총구 화염 각 1개 생성 및 0.08초 제거 검증 통과
+- 기존 01-E 지연 검증을 50ms / 100ms에서 재실행해 ADS, Fire cadence, Close 직후 Fire, Reload, 탄종 비밀성, Death 정리 회귀 통과
+
+판정: **01-F Presentation 수정 자동 검증 통과 / Ready for Review**
 
 ### 커밋 게이트
 
@@ -1245,8 +1257,8 @@ Live / Blank / Rubber / Empty / Live / Blank
 - [x] R21 UE 5.8 import
 - [x] Revolver mesh 검증
 - [x] FP animations 연결
-- [ ] TP animations 연결
-- [ ] lower-body layer 연결
+- [x] TP animations 연결
+- [x] lower-body layer 연결
 - [x] Fire SFX
 - [x] Reload/mechanical SFX
 - [x] Muzzle Flash
