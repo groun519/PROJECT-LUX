@@ -6,6 +6,7 @@
 
 class UCameraComponent;
 class UAnimMontage;
+class UAnimSequenceBase;
 class UInputAction;
 class UInputMappingContext;
 class USceneComponent;
@@ -42,7 +43,9 @@ public:
 
 	USkeletalMeshComponent* GetFirstPersonArms() const;
 	void PlayFirstPersonMontage(UAnimMontage* Montage, float PlayRate = 1.0f);
+	void PlayThirdPersonUpperBodyAnimation(UAnimSequenceBase* Animation, float PlayRate = 1.0f);
 	void StopFirstPersonMontages(float BlendOutSeconds = 0.15f);
+	void StopThirdPersonUpperBodyAnimation(float BlendOutSeconds = 0.15f);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "State")
 	bool Die();

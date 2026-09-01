@@ -17,4 +17,16 @@ public:
 
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Locomotion")
 	float Direction = 0.0f;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Revolver|ThirdPerson")
+	float RevolverUpperBodyWeight = 0.0f;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Revolver|ThirdPerson")
+	float RevolverAimWeight = 0.0f;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Revolver|ThirdPerson")
+	FRotator NeckLookRotation = FRotator::ZeroRotator;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Revolver|ThirdPerson")
+	FRotator HeadLookRotation = FRotator::ZeroRotator;
 };

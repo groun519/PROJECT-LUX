@@ -479,6 +479,36 @@ Third-Person Final Pose
 - 하체 이동이 상체 애니메이션에 의해 깨지지 않음
 - 별도 TP 팩 구매 필요 여부 결론 도출
 
+### 완료 기록 - 2026-09-01
+
+- R21 Arms Skeleton에 전신 `Spine / Neck / Head / Arm / Leg / IK` Chain이 존재하고 Casual 01 Skeleton과 자동 IK Retarget 구성이 가능함을 확인
+- `/Game/LUX/Animation/Retarget/IK_R21`과 `/Game/LUX/Animation/Retarget/RTG_R21_To_Casual01` 생성
+- Idle / Aim / Hip Fire / Aim Fire / Single Round Reload 5개를 Casual 01 Skeleton용 `/Game/LUX/Animation/Revolver/ThirdPerson` 자산으로 Retarget
+- 기존 `BS_Lux_Locomotion`을 Base Pose로 유지하고 `Idle -> Aim -> DefaultSlot` 결과를 `spine_01`부터 `Layered Blend Per Bone`으로 합성
+- Fire / Reload는 Retarget Sequence를 Dynamic Montage로 `DefaultSlot`에 재생하여 이동 중에도 하체 Locomotion을 유지
+- Camera Pitch / Yaw를 각각 `-50~50`, `-60~60`으로 제한하고 Neck 35% / Head 65%로 분배해 보간
+- `CharacterMesh0`의 -90도 Yaw를 반영해 Camera Pitch를 Mesh Component-space `-Roll` 축으로 변환하고, 실제 캡처에서 옆 꺾임 없이 위아래 추적함을 확인
+- R21 Revolver visual을 `OwnerNoSee` Remote Mesh로 추가하고 외부 Skeleton을 수정하지 않은 채 원본 `38` Socket의 `hand_r` Offset을 적용
+- 일반화된 Fire / Dry Fire / Reload / Cylinder / Round Insert 복제 이벤트로 Remote Body / Weapon montage, SFX, Muzzle Flash를 재생
+- Listen Host가 Client 연출을 보는 경로와 다른 Client가 Host / Client 연출을 보는 경로를 모두 확인
+- JIP 초기 복제 시 과거 Sequence를 새 Cosmetic Event로 재생하지 않도록 `PostNetInit` 이후에만 RepNotify 연출을 허용
+- Cylinder 취소와 사망 시 Remote Body / Weapon montage가 함께 종료되도록 정리
+
+검증 결과:
+
+- UE 5.8 Development Editor 빌드 통과
+- AnimBP 정적 검증 통과: `BS_Lux_Locomotion`, Idle / Aim, `DefaultSlot`, `root / spine_01` Layer, `neck_01 / head`
+- 3 Player PIE 50ms / 100ms에서 전체 9개 Character Copy의 Remote Weapon 부착과 `OwnerNoSee` 정책 확인
+- 이동 중 Remote AnimInstance Speed 약 `600`, Upper Body / Aim Weight `1.0` 유지
+- Remote Head / Neck가 Camera Pitch 약 `35도`를 양쪽 관전자 화면에서 동일하게 추적
+- Client Fire / Reload를 Listen Server와 Observer Client가 모두 재생하고, Host Fire도 Observer Client가 재생
+- Reload 취소와 사망 이후 Remote Body / Weapon montage 종료 확인
+- 최종 캡처에서 손-리볼버 부착, 한 손 Aim, 하체 독립 자세와 Head Look을 화면 확인
+
+결론: 현재 R21 재사용 구조로 01 범위의 멀티플레이 프로토타입 품질은 충족한다. 별도 Third-Person Animation Pack 구매는 필요하지 않으며, 향후 캐릭터 폴리시 단계에서 왼팔 보조 자세와 세부 손가락 접촉만 선택적으로 개선한다.
+
+판정: **01-F 완료 / Ready for Review**
+
 ### 커밋 게이트
 
 권장 커밋 메시지:

@@ -7,6 +7,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimSequenceBase.h"
 #include "Engine/SkeletalMesh.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -177,6 +178,26 @@ void ALuxCharacter::PlayFirstPersonMontage(UAnimMontage* Montage, float PlayRate
 	}
 }
 
+void ALuxCharacter::PlayThirdPersonUpperBodyAnimation(UAnimSequenceBase* Animation, float PlayRate)
+{
+	if (IsLocallyControlled() || !Animation)
+	{
+		return;
+	}
+
+	if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+	{
+		AnimInstance->PlaySlotAnimationAsDynamicMontage(
+			Animation,
+			TEXT("DefaultSlot"),
+			0.1f,
+			0.15f,
+			PlayRate,
+			1
+		);
+	}
+}
+
 void ALuxCharacter::StopFirstPersonMontages(float BlendOutSeconds)
 {
 	if (FirstPersonArms)
@@ -185,6 +206,14 @@ void ALuxCharacter::StopFirstPersonMontages(float BlendOutSeconds)
 		{
 			AnimInstance->Montage_Stop(BlendOutSeconds);
 		}
+	}
+}
+
+void ALuxCharacter::StopThirdPersonUpperBodyAnimation(float BlendOutSeconds)
+{
+	if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+	{
+		AnimInstance->StopAllMontages(BlendOutSeconds);
 	}
 }
 
@@ -251,7 +280,7 @@ void ALuxCharacter::AttachEquippedRevolver()
 			RevolverAttachPoint,
 			FAttachmentTransformRules::SnapToTargetNotIncludingScale
 		);
-		EquippedRevolver->AttachFirstPersonVisualTo(FirstPersonArms);
+		EquippedRevolver->AttachPresentationVisualsTo(FirstPersonArms, GetMesh());
 	}
 }
 

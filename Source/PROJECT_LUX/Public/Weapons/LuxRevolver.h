@@ -8,6 +8,7 @@
 class ALuxCharacter;
 class ALuxRevolver;
 class UAnimMontage;
+class UAnimSequenceBase;
 class UNiagaraSystem;
 class USkeletalMeshComponent;
 class USoundBase;
@@ -41,6 +42,7 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void PostNetInit() override;
 
 	UFUNCTION(BlueprintPure, Category = "Revolver")
 	int32 GetChamberCount() const;
@@ -60,7 +62,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Revolver")
 	void RequestFire();
 
-	void AttachFirstPersonVisualTo(USkeletalMeshComponent* FirstPersonArms);
+	void AttachPresentationVisualsTo(
+		USkeletalMeshComponent* FirstPersonArms,
+		USkeletalMeshComponent* ThirdPersonBody
+	);
 	void StopOwnerPresentation();
 
 	UFUNCTION(BlueprintCallable, Category = "Revolver|Reload")
@@ -171,6 +176,7 @@ private:
 	void CommitPendingRoundInsertion();
 	int32 FindNextEmptyChamber(int32 StartIndex) const;
 	bool IsLocallyPresented() const;
+	bool IsRemotelyPresented() const;
 	bool IsValidChamberIndex(int32 ChamberIndex) const;
 	void PauseReloadPresentation();
 	void PlayCylinderPresentation(bool bNowOpen);
@@ -182,7 +188,13 @@ private:
 	void ResolvePresentationAssets();
 	bool ResolveServerFire(bool& bOutDryFire);
 	void ScheduleCylinderOpenPosePause();
+	void PlayThirdPersonCylinderPresentation(bool bNowOpen);
+	void PlayThirdPersonFirePresentation(bool bDryFire);
+	void PlayThirdPersonReloadPresentation();
+	void PlayThirdPersonRoundInsertPresentation();
+	void PlaySoundForRemote(USoundBase* Sound) const;
 	void StopReloadPresentation();
+	void StopThirdPersonReloadPresentation();
 	ALuxCharacter* TraceCharacter(const ALuxCharacter* EquippedCharacter) const;
 	bool TryCancelReload();
 	bool TryCloseCylinder();
@@ -195,6 +207,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Revolver|Presentation", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USkeletalMeshComponent> FirstPersonWeaponMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Revolver|Presentation", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkeletalMeshComponent> ThirdPersonWeaponMesh;
 
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	uint8 LoadedMask = 0;
@@ -241,6 +256,15 @@ private:
 	TSoftObjectPtr<UAnimMontage> WeaponHipFireMontage;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<UAnimSequenceBase> ThirdPersonHipFireAnimation;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<UAnimSequenceBase> ThirdPersonAimFireAnimation;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
+	TSoftObjectPtr<UAnimSequenceBase> ThirdPersonReloadAnimation;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
 	TSoftObjectPtr<UNiagaraSystem> MuzzleFlashSystem;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation")
@@ -275,6 +299,15 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimMontage> ResolvedWeaponHipFireMontage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequenceBase> ResolvedThirdPersonHipFireAnimation;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequenceBase> ResolvedThirdPersonAimFireAnimation;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequenceBase> ResolvedThirdPersonReloadAnimation;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNiagaraSystem> ResolvedMuzzleFlashSystem;
@@ -323,4 +356,5 @@ private:
 	FTimerHandle RoundInsertionTimer;
 	FTimerHandle CylinderOpenPoseTimer;
 	FName LastReloadResultForDevelopment = TEXT("None");
+	bool bPresentationReplicationReady = false;
 };

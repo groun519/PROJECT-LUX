@@ -1,6 +1,7 @@
 #include "Weapons/LuxRevolver.h"
 
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimSequenceBase.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
@@ -18,6 +19,10 @@ namespace
 {
 	const FName R21WeaponSocket(TEXT("38"));
 	const FName R21MuzzleSocket(TEXT("weapon_r_muzzle"));
+	const FName ThirdPersonHandBone(TEXT("hand_r"));
+	const FVector R21WeaponGripLocation(-8.018609, 3.509527, -1.799098);
+	const FRotator R21WeaponGripRotation(17.229283, 72.287198, 1.505405);
+	const FVector R21WeaponMuzzleOffset(45.0, 0.0, 25.0);
 
 	const TCHAR* LexToString(ELuxRevolverRoundType RoundType)
 	{
@@ -54,6 +59,12 @@ ALuxRevolver::ALuxRevolver()
 	FirstPersonWeaponMesh->SetCastShadow(false);
 	FirstPersonWeaponMesh->bCastDynamicShadow = false;
 
+	ThirdPersonWeaponMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("ThirdPersonWeaponMesh"));
+	ThirdPersonWeaponMesh->SetupAttachment(RootComponent);
+	ThirdPersonWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ThirdPersonWeaponMesh->SetGenerateOverlapEvents(false);
+	ThirdPersonWeaponMesh->SetOwnerNoSee(true);
+
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> WeaponMeshFinder(
 		TEXT("/Game/RevolverFPGM/System/FPWeapon/Mesh/Revolver/SKM_Revolver_NoClip.SKM_Revolver_NoClip"));
 	static ConstructorHelpers::FClassFinder<UAnimInstance> WeaponAnimClassFinder(
@@ -61,10 +72,12 @@ ALuxRevolver::ALuxRevolver()
 	if (WeaponMeshFinder.Succeeded())
 	{
 		FirstPersonWeaponMesh->SetSkeletalMeshAsset(WeaponMeshFinder.Object);
+		ThirdPersonWeaponMesh->SetSkeletalMeshAsset(WeaponMeshFinder.Object);
 	}
 	if (WeaponAnimClassFinder.Succeeded())
 	{
 		FirstPersonWeaponMesh->SetAnimInstanceClass(WeaponAnimClassFinder.Class);
+		ThirdPersonWeaponMesh->SetAnimInstanceClass(WeaponAnimClassFinder.Class);
 	}
 
 	SingleRoundReloadMontage = TSoftObjectPtr<UAnimMontage>(FSoftObjectPath(
@@ -84,6 +97,15 @@ ALuxRevolver::ALuxRevolver()
 	));
 	WeaponHipFireMontage = TSoftObjectPtr<UAnimMontage>(FSoftObjectPath(
 		TEXT("/Game/RevolverFPGM/System/Animation/Fire/NoAim/Montages/A_Wpn_Fire_NoAim_Standard_Revolver_Montage.A_Wpn_Fire_NoAim_Standard_Revolver_Montage")
+	));
+	ThirdPersonHipFireAnimation = TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(
+		TEXT("/Game/LUX/Animation/Revolver/ThirdPerson/A_Lux_TP_Revolver_FireHip.A_Lux_TP_Revolver_FireHip")
+	));
+	ThirdPersonAimFireAnimation = TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(
+		TEXT("/Game/LUX/Animation/Revolver/ThirdPerson/A_Lux_TP_Revolver_FireAim.A_Lux_TP_Revolver_FireAim")
+	));
+	ThirdPersonReloadAnimation = TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(
+		TEXT("/Game/LUX/Animation/Revolver/ThirdPerson/A_Lux_TP_Revolver_ReloadSingle.A_Lux_TP_Revolver_ReloadSingle")
 	));
 	MuzzleFlashSystem = TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(
 		TEXT("/Game/MuzzleFlash/MuzzleFlash/Niagara/NS_MuzzleFlash.NS_MuzzleFlash")
@@ -128,6 +150,13 @@ void ALuxRevolver::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ALuxRevolver, bRoundInsertionPending);
 	DOREPLIFETIME(ALuxRevolver, ReloadSequence);
 	DOREPLIFETIME(ALuxRevolver, RoundInsertSequence);
+}
+
+void ALuxRevolver::PostNetInit()
+{
+	Super::PostNetInit();
+	// Initial JIP state is not a new cosmetic event.
+	bPresentationReplicationReady = true;
 }
 
 int32 ALuxRevolver::GetChamberCount() const
@@ -194,34 +223,49 @@ void ALuxRevolver::RequestFire()
 	ServerFire(RequestId);
 }
 
-void ALuxRevolver::AttachFirstPersonVisualTo(USkeletalMeshComponent* FirstPersonArms)
+void ALuxRevolver::AttachPresentationVisualsTo(
+	USkeletalMeshComponent* FirstPersonArms,
+	USkeletalMeshComponent* ThirdPersonBody
+)
 {
-	if (!FirstPersonWeaponMesh || !FirstPersonArms)
+	if (FirstPersonWeaponMesh && FirstPersonArms)
 	{
-		return;
+		ensureMsgf(
+			FirstPersonArms->DoesSocketExist(R21WeaponSocket),
+			TEXT("R21 First Person Arms is missing required weapon socket '%s'."),
+			*R21WeaponSocket.ToString()
+		);
+		ensureMsgf(
+			FirstPersonArms->DoesSocketExist(R21MuzzleSocket),
+			TEXT("R21 First Person Arms is missing required muzzle socket '%s'."),
+			*R21MuzzleSocket.ToString()
+		);
+		FirstPersonWeaponMesh->AttachToComponent(
+			FirstPersonArms,
+			FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+			R21WeaponSocket
+		);
 	}
 
-	ensureMsgf(
-		FirstPersonArms->DoesSocketExist(R21WeaponSocket),
-		TEXT("R21 First Person Arms is missing required weapon socket '%s'."),
-		*R21WeaponSocket.ToString()
-	);
-	ensureMsgf(
-		FirstPersonArms->DoesSocketExist(R21MuzzleSocket),
-		TEXT("R21 First Person Arms is missing required muzzle socket '%s'."),
-		*R21MuzzleSocket.ToString()
-	);
-
-	FirstPersonWeaponMesh->AttachToComponent(
-		FirstPersonArms,
-		FAttachmentTransformRules::SnapToTargetNotIncludingScale,
-		R21WeaponSocket
-	);
+	if (ThirdPersonWeaponMesh && ThirdPersonBody)
+	{
+		ThirdPersonWeaponMesh->AttachToComponent(
+			ThirdPersonBody,
+			FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+			ThirdPersonHandBone
+		);
+		// Reuse the R21 hand socket offset without modifying the Marketplace skeleton.
+		ThirdPersonWeaponMesh->SetRelativeLocationAndRotation(
+			R21WeaponGripLocation,
+			R21WeaponGripRotation
+		);
+	}
 }
 
 void ALuxRevolver::StopOwnerPresentation()
 {
 	StopReloadPresentation();
+	StopThirdPersonReloadPresentation();
 }
 
 void ALuxRevolver::RequestOpenCylinder()
@@ -237,35 +281,74 @@ void ALuxRevolver::RequestOpenCylinder()
 
 void ALuxRevolver::OnRep_CylinderOpen(bool bWasCylinderOpen)
 {
-	if (bWasCylinderOpen != bCylinderOpen && IsLocallyPresented())
+	if (!bPresentationReplicationReady || bWasCylinderOpen == bCylinderOpen)
+	{
+		return;
+	}
+
+	if (IsLocallyPresented())
 	{
 		PlayCylinderPresentation(bCylinderOpen);
+	}
+	else if (IsRemotelyPresented())
+	{
+		PlayThirdPersonCylinderPresentation(bCylinderOpen);
+		if (!bCylinderOpen)
+		{
+			StopThirdPersonReloadPresentation();
+		}
 	}
 }
 
 void ALuxRevolver::OnRep_FireSequence()
 {
-	// Owner presentation is reconciled by ClientConfirmFire using the matching request id.
+	// The owner reconciles by request id; non-owners consume the generic replicated event.
+	if (bPresentationReplicationReady && IsRemotelyPresented())
+	{
+		PlayThirdPersonFirePresentation(false);
+	}
 }
 
 void ALuxRevolver::OnRep_DryFireSequence()
 {
-	// Owner presentation is reconciled by ClientConfirmFire using the matching request id.
+	// The owner reconciles by request id; non-owners consume the generic replicated event.
+	if (bPresentationReplicationReady && IsRemotelyPresented())
+	{
+		PlayThirdPersonFirePresentation(true);
+	}
 }
 
 void ALuxRevolver::OnRep_ReloadSequence()
 {
+	if (!bPresentationReplicationReady)
+	{
+		return;
+	}
+
 	if (IsLocallyPresented())
 	{
 		PlayReloadPresentation();
+	}
+	else if (IsRemotelyPresented())
+	{
+		PlayThirdPersonReloadPresentation();
 	}
 }
 
 void ALuxRevolver::OnRep_RoundInsertSequence()
 {
+	if (!bPresentationReplicationReady)
+	{
+		return;
+	}
+
 	if (IsLocallyPresented())
 	{
 		PlayRoundInsertPresentation();
+	}
+	else if (IsRemotelyPresented())
+	{
+		PlayThirdPersonRoundInsertPresentation();
 	}
 }
 
@@ -318,6 +401,10 @@ bool ALuxRevolver::BeginRoundInsertion(ELuxRevolverRoundType RoundType)
 	if (IsLocallyPresented())
 	{
 		PlayReloadPresentation();
+	}
+	else if (IsRemotelyPresented())
+	{
+		PlayThirdPersonReloadPresentation();
 	}
 
 	if (RoundInsertCommitDelaySeconds <= 0.0f || !GetWorld())
@@ -510,6 +597,10 @@ bool ALuxRevolver::ResolveServerFire(bool& bOutDryFire)
 		LastFireResultForDevelopment = TEXT("DryFire");
 		OnDryFire.Broadcast(this);
 		ForceNetUpdate();
+		if (IsRemotelyPresented())
+		{
+			PlayThirdPersonFirePresentation(true);
+		}
 		return true;
 	}
 
@@ -550,6 +641,10 @@ bool ALuxRevolver::ResolveServerFire(bool& bOutDryFire)
 	++FireSequence;
 	ConsumeCurrentRoundAndAdvance();
 	ForceNetUpdate();
+	if (IsRemotelyPresented())
+	{
+		PlayThirdPersonFirePresentation(false);
+	}
 	return true;
 }
 
@@ -659,6 +754,10 @@ void ALuxRevolver::CommitPendingRoundInsertion()
 	{
 		PlayRoundInsertPresentation();
 	}
+	else if (IsRemotelyPresented())
+	{
+		PlayThirdPersonRoundInsertPresentation();
+	}
 }
 
 int32 ALuxRevolver::FindNextEmptyChamber(int32 StartIndex) const
@@ -699,6 +798,9 @@ void ALuxRevolver::ResolvePresentationAssets()
 	ResolvedWeaponAimFireMontage = WeaponAimFireMontage.LoadSynchronous();
 	ResolvedHipFireMontage = HipFireMontage.LoadSynchronous();
 	ResolvedWeaponHipFireMontage = WeaponHipFireMontage.LoadSynchronous();
+	ResolvedThirdPersonHipFireAnimation = ThirdPersonHipFireAnimation.LoadSynchronous();
+	ResolvedThirdPersonAimFireAnimation = ThirdPersonAimFireAnimation.LoadSynchronous();
+	ResolvedThirdPersonReloadAnimation = ThirdPersonReloadAnimation.LoadSynchronous();
 	ResolvedMuzzleFlashSystem = MuzzleFlashSystem.LoadSynchronous();
 	ResolvedFireSound = FireSound.LoadSynchronous();
 	ResolvedDryFireSound = DryFireSound.LoadSynchronous();
@@ -712,12 +814,23 @@ void ALuxRevolver::ResolvePresentationAssets()
 	ensureMsgf(ResolvedWeaponAimFireMontage, TEXT("Missing required R21 weapon aim-fire montage."));
 	ensureMsgf(ResolvedHipFireMontage, TEXT("Missing required R21 arms hip-fire montage."));
 	ensureMsgf(ResolvedWeaponHipFireMontage, TEXT("Missing required R21 weapon hip-fire montage."));
+	ensureMsgf(ResolvedThirdPersonHipFireAnimation, TEXT("Missing retargeted third-person hip-fire animation."));
+	ensureMsgf(ResolvedThirdPersonAimFireAnimation, TEXT("Missing retargeted third-person aim-fire animation."));
+	ensureMsgf(ResolvedThirdPersonReloadAnimation, TEXT("Missing retargeted third-person reload animation."));
 	ensureMsgf(ResolvedMuzzleFlashSystem, TEXT("Missing required muzzle flash system."));
 	ensureMsgf(ResolvedFireSound, TEXT("Missing required R21 fire sound."));
 	ensureMsgf(ResolvedDryFireSound, TEXT("Missing required R21 dry-fire sound."));
 	ensureMsgf(ResolvedCylinderOpenSound, TEXT("Missing required R21 cylinder-open sound."));
 	ensureMsgf(ResolvedCylinderCloseSound, TEXT("Missing required R21 cylinder-close sound."));
 	ensureMsgf(ResolvedRoundInsertSound, TEXT("Missing required R21 round-insert sound."));
+}
+
+bool ALuxRevolver::IsRemotelyPresented() const
+{
+	const ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
+	return GetNetMode() != NM_DedicatedServer
+		&& EquippedCharacter
+		&& !EquippedCharacter->IsLocallyControlled();
 }
 
 void ALuxRevolver::PlayCylinderPresentation(bool bNowOpen)
@@ -865,6 +978,84 @@ void ALuxRevolver::PlaySoundForOwner(USoundBase* Sound, FName SocketName) const
 	}
 }
 
+void ALuxRevolver::PlayThirdPersonCylinderPresentation(bool bNowOpen)
+{
+	PlaySoundForRemote(bNowOpen ? ResolvedCylinderOpenSound : ResolvedCylinderCloseSound);
+}
+
+void ALuxRevolver::PlayThirdPersonFirePresentation(bool bDryFire)
+{
+	if (!IsRemotelyPresented() || !ThirdPersonWeaponMesh)
+	{
+		return;
+	}
+
+	if (bDryFire)
+	{
+		PlaySoundForRemote(ResolvedDryFireSound);
+		return;
+	}
+
+	const ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
+	const bool bAiming = EquippedCharacter && EquippedCharacter->IsAiming();
+	if (ALuxCharacter* MutableCharacter = Cast<ALuxCharacter>(GetOwner()))
+	{
+		MutableCharacter->PlayThirdPersonUpperBodyAnimation(
+			bAiming ? ResolvedThirdPersonAimFireAnimation : ResolvedThirdPersonHipFireAnimation
+		);
+	}
+	if (UAnimInstance* AnimInstance = ThirdPersonWeaponMesh->GetAnimInstance())
+	{
+		AnimInstance->Montage_Play(
+			bAiming ? ResolvedWeaponAimFireMontage : ResolvedWeaponHipFireMontage
+		);
+	}
+
+	PlaySoundForRemote(ResolvedFireSound);
+	if (UNiagaraSystem* MuzzleFlash = ResolvedMuzzleFlashSystem)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAttached(
+			MuzzleFlash,
+			ThirdPersonWeaponMesh,
+			NAME_None,
+			R21WeaponMuzzleOffset,
+			FRotator::ZeroRotator,
+			EAttachLocation::KeepRelativeOffset,
+			true
+		);
+	}
+}
+
+void ALuxRevolver::PlayThirdPersonReloadPresentation()
+{
+	if (!IsRemotelyPresented() || !ThirdPersonWeaponMesh)
+	{
+		return;
+	}
+
+	if (UAnimInstance* AnimInstance = ThirdPersonWeaponMesh->GetAnimInstance())
+	{
+		AnimInstance->Montage_Play(ResolvedWeaponSingleRoundReloadMontage, 1.3f);
+	}
+	if (ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner()))
+	{
+		EquippedCharacter->PlayThirdPersonUpperBodyAnimation(ResolvedThirdPersonReloadAnimation, 1.3f);
+	}
+}
+
+void ALuxRevolver::PlayThirdPersonRoundInsertPresentation()
+{
+	PlaySoundForRemote(ResolvedRoundInsertSound);
+}
+
+void ALuxRevolver::PlaySoundForRemote(USoundBase* Sound) const
+{
+	if (IsRemotelyPresented() && Sound && ThirdPersonWeaponMesh)
+	{
+		UGameplayStatics::SpawnSoundAttached(Sound, ThirdPersonWeaponMesh);
+	}
+}
+
 void ALuxRevolver::StopReloadPresentation()
 {
 	if (GetWorld())
@@ -878,6 +1069,21 @@ void ALuxRevolver::StopReloadPresentation()
 	if (FirstPersonWeaponMesh)
 	{
 		if (UAnimInstance* AnimInstance = FirstPersonWeaponMesh->GetAnimInstance())
+		{
+			AnimInstance->Montage_Stop(0.15f);
+		}
+	}
+}
+
+void ALuxRevolver::StopThirdPersonReloadPresentation()
+{
+	if (ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner()))
+	{
+		EquippedCharacter->StopThirdPersonUpperBodyAnimation();
+	}
+	if (ThirdPersonWeaponMesh)
+	{
+		if (UAnimInstance* AnimInstance = ThirdPersonWeaponMesh->GetAnimInstance())
 		{
 			AnimInstance->Montage_Stop(0.15f);
 		}
@@ -901,6 +1107,11 @@ bool ALuxRevolver::TryCancelReload()
 	{
 		PlayCylinderPresentation(false);
 	}
+	else if (IsRemotelyPresented())
+	{
+		PlayThirdPersonCylinderPresentation(false);
+		StopThirdPersonReloadPresentation();
+	}
 	return true;
 }
 
@@ -919,6 +1130,11 @@ bool ALuxRevolver::TryCloseCylinder()
 	if (IsLocallyPresented())
 	{
 		PlayCylinderPresentation(false);
+	}
+	else if (IsRemotelyPresented())
+	{
+		PlayThirdPersonCylinderPresentation(false);
+		StopThirdPersonReloadPresentation();
 	}
 	return true;
 }
@@ -939,6 +1155,10 @@ bool ALuxRevolver::TryOpenCylinder()
 	if (IsLocallyPresented())
 	{
 		PlayCylinderPresentation(true);
+	}
+	else if (IsRemotelyPresented())
+	{
+		PlayThirdPersonCylinderPresentation(true);
 	}
 	return true;
 }
