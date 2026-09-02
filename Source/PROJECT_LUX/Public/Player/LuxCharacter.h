@@ -41,6 +41,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Revolver|Development", meta = (DevelopmentOnly))
 	bool GetLocalAimIntentForDevelopment() const;
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Revolver|Development", meta = (DevelopmentOnly))
+	bool SetAimingForDevelopment(bool bNewAiming);
+
 	USkeletalMeshComponent* GetFirstPersonArms() const;
 	void PlayFirstPersonMontage(
 		UAnimMontage* Montage,

@@ -296,6 +296,24 @@ void ALuxRevolver::RequestOpenCylinder()
 	ServerOpenCylinder();
 }
 
+bool ALuxRevolver::GetThirdPersonMuzzleTransform(FTransform& OutTransform) const
+{
+	if (!ThirdPersonMuzzleAnchor || !ThirdPersonWeaponMesh)
+	{
+		return false;
+	}
+
+	// The R21 revolver barrel runs along mesh-local +Y. The Niagara anchor has
+	// its own effect-facing rotation, so it cannot be used as the ballistic axis.
+	const FVector BarrelForward = ThirdPersonWeaponMesh->GetRightVector();
+	const FVector BarrelUp = ThirdPersonWeaponMesh->GetUpVector();
+	OutTransform = FTransform(
+		FRotationMatrix::MakeFromXZ(BarrelForward, BarrelUp).ToQuat(),
+		ThirdPersonMuzzleAnchor->GetComponentLocation()
+	);
+	return true;
+}
+
 void ALuxRevolver::OnRep_LoadedMask()
 {
 	RefreshBulletVisuals();

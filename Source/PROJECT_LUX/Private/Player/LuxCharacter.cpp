@@ -160,6 +160,18 @@ bool ALuxCharacter::GetLocalAimIntentForDevelopment() const
 	return bLocalAimIntent;
 }
 
+bool ALuxCharacter::SetAimingForDevelopment(bool bNewAiming)
+{
+	if (!HasAuthority())
+	{
+		return false;
+	}
+
+	bIsAiming = bNewAiming && !bIsDead;
+	ForceNetUpdate();
+	return true;
+}
+
 USkeletalMeshComponent* ALuxCharacter::GetFirstPersonArms() const
 {
 	return FirstPersonArms;

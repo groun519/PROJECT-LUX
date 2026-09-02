@@ -68,6 +68,7 @@ public:
 		USkeletalMeshComponent* ThirdPersonBody
 	);
 	void StopOwnerPresentation();
+	bool GetThirdPersonMuzzleTransform(FTransform& OutTransform) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Revolver|Reload")
 	void RequestOpenCylinder();
