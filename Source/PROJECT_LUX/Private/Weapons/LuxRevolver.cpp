@@ -22,10 +22,11 @@ namespace
 	const FName ThirdPersonHandBone(TEXT("hand_r"));
 	const FVector R21WeaponGripLocation(-8.018609, 3.509527, -1.799098);
 	const FRotator R21WeaponGripRotation(17.229283, 72.287198, 1.505405);
-	// Calibrated from the R21 Arms weapon_r_muzzle socket into the attached
-	// SKM_Revolver_NoClip component space. The weapon mesh owns no muzzle socket.
-	const FVector R21WeaponMuzzleLocation(11.830085, -45.067125, 34.002318);
-	const FRotator R21WeaponMuzzleRotation(10.930935, -76.599389, 5.444840);
+	const FName R21WeaponMuzzleBone(TEXT("Slide_1"));
+	// SKM_Revolver_NoClip has no muzzle socket. These project-owned anchors sit
+	// at the barrel opening while following the Marketplace mesh's barrel bone.
+	const FVector R21WeaponMuzzleBoneOffset(-0.004073, -5.387779, -0.123886);
+	const FRotator R21WeaponMuzzleBoneRotation(-0.010194, 179.969855, 0.0);
 	const TStaticArray<FName, ALuxRevolver::ChamberCount> R21BulletBones = {
 		FName(TEXT("Bullet_1")),
 		FName(TEXT("Bullet_2")),
@@ -75,6 +76,20 @@ ALuxRevolver::ALuxRevolver()
 	ThirdPersonWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	ThirdPersonWeaponMesh->SetGenerateOverlapEvents(false);
 	ThirdPersonWeaponMesh->SetOwnerNoSee(true);
+
+	FirstPersonMuzzleAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("FirstPersonMuzzleAnchor"));
+	FirstPersonMuzzleAnchor->SetupAttachment(FirstPersonWeaponMesh, R21WeaponMuzzleBone);
+	FirstPersonMuzzleAnchor->SetRelativeLocationAndRotation(
+		R21WeaponMuzzleBoneOffset,
+		R21WeaponMuzzleBoneRotation
+	);
+
+	ThirdPersonMuzzleAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("ThirdPersonMuzzleAnchor"));
+	ThirdPersonMuzzleAnchor->SetupAttachment(ThirdPersonWeaponMesh, R21WeaponMuzzleBone);
+	ThirdPersonMuzzleAnchor->SetRelativeLocationAndRotation(
+		R21WeaponMuzzleBoneOffset,
+		R21WeaponMuzzleBoneRotation
+	);
 
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> WeaponMeshFinder(
 		TEXT("/Game/RevolverFPGM/System/FPWeapon/Mesh/Revolver/SKM_Revolver_NoClip.SKM_Revolver_NoClip"));
@@ -887,7 +902,10 @@ void ALuxRevolver::PlayFirePresentation(bool bDryFire)
 	}
 
 	// The R21 weapon montage already contains the trigger and one fire sound notify.
-	SpawnMuzzleFlashFor(FirstPersonWeaponMesh, FirstPersonMuzzleFlashScale);
+	SpawnMuzzleFlashFor(
+		FirstPersonMuzzleAnchor,
+		FirstPersonMuzzleFlashScale,
+		FirstPersonMuzzleFlashDurationSeconds);
 }
 
 void ALuxRevolver::PlayReloadPresentation(float StartPositionSeconds)
@@ -1003,19 +1021,22 @@ void ALuxRevolver::HoldCylinderOpenPresentation()
 	}
 }
 
-void ALuxRevolver::SpawnMuzzleFlashFor(USkeletalMeshComponent* WeaponMesh, float Scale) const
+void ALuxRevolver::SpawnMuzzleFlashFor(
+	USceneComponent* MuzzleAnchor,
+	float Scale,
+	float DurationSeconds) const
 {
-	if (!WeaponMesh || !ResolvedMuzzleFlashSystem || !GetWorld())
+	if (!MuzzleAnchor || !ResolvedMuzzleFlashSystem || !GetWorld())
 	{
 		return;
 	}
 
 	UNiagaraComponent* MuzzleFlashComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
 		ResolvedMuzzleFlashSystem,
-		WeaponMesh,
+		MuzzleAnchor,
 		NAME_None,
-		R21WeaponMuzzleLocation,
-		R21WeaponMuzzleRotation,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
 		FVector(FMath::Max(Scale, 0.01f)),
 		EAttachLocation::KeepRelativeOffset,
 		false,
@@ -1039,7 +1060,7 @@ void ALuxRevolver::SpawnMuzzleFlashFor(USkeletalMeshComponent* WeaponMesh, float
 				Component->DestroyComponent();
 			}
 		}),
-		FMath::Max(MuzzleFlashDurationSeconds, 0.01f),
+		FMath::Max(DurationSeconds, 0.01f),
 		false
 	);
 }
@@ -1099,7 +1120,10 @@ void ALuxRevolver::PlayThirdPersonFirePresentation(bool bDryFire)
 	}
 
 	// The R21 weapon montage already contains the trigger and one fire sound notify.
-	SpawnMuzzleFlashFor(ThirdPersonWeaponMesh, ThirdPersonMuzzleFlashScale);
+	SpawnMuzzleFlashFor(
+		ThirdPersonMuzzleAnchor,
+		ThirdPersonMuzzleFlashScale,
+		ThirdPersonMuzzleFlashDurationSeconds);
 }
 
 void ALuxRevolver::PlayThirdPersonReloadPresentation(float StartPositionSeconds)

@@ -10,6 +10,7 @@ class ALuxRevolver;
 class UAnimMontage;
 class UAnimSequenceBase;
 class UNiagaraSystem;
+class USceneComponent;
 class USkeletalMeshComponent;
 class USoundBase;
 
@@ -191,7 +192,7 @@ private:
 	void ResolvePresentationAssets();
 	bool ResolveServerFire(bool& bOutDryFire);
 	void ScheduleCylinderOpenPoseHold(float DelaySeconds);
-	void SpawnMuzzleFlashFor(USkeletalMeshComponent* WeaponMesh, float Scale) const;
+	void SpawnMuzzleFlashFor(USceneComponent* MuzzleAnchor, float Scale, float DurationSeconds) const;
 	void PlayThirdPersonCylinderPresentation(bool bNowOpen);
 	void PlayThirdPersonFirePresentation(bool bDryFire);
 	void PlayThirdPersonReloadPresentation(float StartPositionSeconds = 0.0f);
@@ -215,6 +216,12 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Revolver|Presentation", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USkeletalMeshComponent> ThirdPersonWeaponMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Revolver|Presentation", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USceneComponent> FirstPersonMuzzleAnchor;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Revolver|Presentation", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USceneComponent> ThirdPersonMuzzleAnchor;
 
 	UPROPERTY(ReplicatedUsing = OnRep_LoadedMask, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver", meta = (AllowPrivateAccess = "true"))
 	uint8 LoadedMask = 0;
@@ -341,13 +348,16 @@ private:
 	float CylinderOpenPosePositionSeconds = 0.8f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation", meta = (ClampMin = "0.01"))
-	float MuzzleFlashDurationSeconds = 0.08f;
+	float FirstPersonMuzzleFlashDurationSeconds = 0.10f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation", meta = (ClampMin = "0.01"))
-	float FirstPersonMuzzleFlashScale = 0.35f;
+	float ThirdPersonMuzzleFlashDurationSeconds = 0.08f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation", meta = (ClampMin = "0.01"))
-	float ThirdPersonMuzzleFlashScale = 0.35f;
+	float FirstPersonMuzzleFlashScale = 0.18f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Presentation", meta = (ClampMin = "0.01"))
+	float ThirdPersonMuzzleFlashScale = 0.20f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Fire", meta = (ClampMin = "100.0"))
 	float TraceRange = 10000.0f;
