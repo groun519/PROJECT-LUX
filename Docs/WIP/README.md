@@ -28,12 +28,18 @@
 
 ## 3. Current workspaces
 
+### `revolver-presentation-architecture-rework/`
+
+`main@f5e7beee` 기준 Phase 01-E/F 전체를 재검수한 현재 구현 기준 문서. Gameplay Revolver / Character와 FP / TP Presentation 책임을 분리하는 implementation-ready architecture correction.
+
 ### `round-game-rule/`
 
 Death Event, GameRuleManager, EndCondition, GameMode commit, GameState replication을 포함한 Round/Game Rule Foundation 상세 초안.
 
+## 4. Superseded workspaces
+
 ### `revolver-fp-presentation-review/`
 
-`main@49e3f7ee` Phase 01-E First-Person Presentation의 코드/네트워크/에셋 경계 검수와 01-F 진행 전 correction 요구사항.
+`main@49e3f7ee`만을 대상으로 했던 과거 01-E review. 이후 01-E correction과 01-F가 구현되어 현재 작업 기준으로 사용하지 않는다. 최신 판단은 `revolver-presentation-architecture-rework/`를 따른다.
 
 Room Frame / Map 구조는 현재 별도 논의 대상이며 아직 이 workspace에서 확정하지 않는다.

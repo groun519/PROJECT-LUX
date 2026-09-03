@@ -1,5 +1,7 @@
 # Phase 01-E First-Person Presentation Review
 
+> **SUPERSEDED**: 이 문서는 `main@49e3f7ee` 당시 버그 검수 기록이다. 이후 01-E correction과 01-F가 구현되었다. 현재 구조 검수와 변경 기준은 `../revolver-presentation-architecture-rework/README.md`를 사용한다. 이 문서를 현재 Codex 작업 지시로 사용하지 않는다.
+
 > Status: **Correction Required**  
 > Reviewed implementation: `main@49e3f7ee701d0247f91663a1229e9ea760812277`  
 > Scope: Phase 01-E only  
