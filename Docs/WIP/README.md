@@ -30,7 +30,7 @@
 
 ### `revolver-presentation-architecture-rework/`
 
-`main@f5e7beee` 기준 Phase 01-E/F 전체를 재검수한 현재 구현 기준 문서. Gameplay Revolver / Character와 FP / TP Presentation 책임을 분리하는 implementation-ready architecture correction.
+`main@0275e299` 기준 Phase 01-E/F, Third-Person Aim IK, Manual Chamber Reload까지 다시 검수한 현재 구현 기준 문서. Gameplay Revolver, shared mechanical visual, FP/TP Presentation 책임을 분리하고 R21 animation timing이 production reload rule에 침투한 결합을 제거하는 implementation-ready architecture correction.
 
 ### `round-game-rule/`
 
