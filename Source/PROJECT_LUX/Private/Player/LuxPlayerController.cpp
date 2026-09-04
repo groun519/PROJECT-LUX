@@ -91,12 +91,19 @@ void ALuxPlayerController::LuxSessionStatus()
 	);
 }
 
-void ALuxPlayerController::LuxLoadRound(FString RoundType)
+void ALuxPlayerController::LuxLoadRound(FString RoundType, int32 ReloadPosition)
 {
 #if UE_BUILD_SHIPPING
 	(void)RoundType;
+	(void)ReloadPosition;
 	return;
 #else
+	if (ReloadPosition < 1 || ReloadPosition > ALuxRevolver::ChamberCount)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("LuxLoadRound: reload position must be between 1 and 6."));
+		return;
+	}
+
 	ELuxRevolverRoundType ParsedRoundType = ELuxRevolverRoundType::Empty;
 	if (RoundType.Equals(TEXT("Live"), ESearchCase::IgnoreCase))
 	{
@@ -121,24 +128,27 @@ void ALuxPlayerController::LuxLoadRound(FString RoundType)
 		if (ALuxRevolver* Revolver = GetEquippedRevolver(this))
 		{
 			// This development driver intentionally enters through the production insertion path.
-			Revolver->BeginRoundInsertion(ParsedRoundType);
+			Revolver->BeginRoundInsertion(ReloadPosition, ParsedRoundType);
 		}
 		return;
 	}
 
-	ServerLoadRoundForDevelopment(ParsedRoundType);
+	ServerLoadRoundForDevelopment(ParsedRoundType, static_cast<uint8>(ReloadPosition));
 #endif
 }
 
-void ALuxPlayerController::ServerLoadRoundForDevelopment_Implementation(ELuxRevolverRoundType RoundType)
+void ALuxPlayerController::ServerLoadRoundForDevelopment_Implementation(
+	ELuxRevolverRoundType RoundType,
+	uint8 ReloadPosition)
 {
 #if UE_BUILD_SHIPPING
 	(void)RoundType;
+	(void)ReloadPosition;
 #else
 	if (ALuxRevolver* Revolver = GetEquippedRevolver(this))
 	{
 		// This development driver intentionally enters through the production insertion path.
-		Revolver->BeginRoundInsertion(RoundType);
+		Revolver->BeginRoundInsertion(ReloadPosition, RoundType);
 	}
 #endif
 }

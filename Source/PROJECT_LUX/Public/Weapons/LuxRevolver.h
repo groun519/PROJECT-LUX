@@ -60,6 +60,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Revolver")
 	bool IsChamberLoaded(int32 ChamberIndex) const;
 
+	// Reload positions are one-based and always relative to the chamber that will fire next.
+	UFUNCTION(BlueprintPure, Category = "Revolver|Reload")
+	int32 GetChamberIndexForReloadPosition(int32 ReloadPosition) const;
+
+	UFUNCTION(BlueprintPure, Category = "Revolver|Reload")
+	bool IsReloadPositionLoaded(int32 ReloadPosition) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Revolver")
 	void RequestFire();
 
@@ -81,7 +88,7 @@ public:
 
 	// Server-side production entry point. Future ammo inventory code must use this path.
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Revolver|Reload")
-	bool BeginRoundInsertion(ELuxRevolverRoundType RoundType);
+	bool BeginRoundInsertion(int32 ReloadPosition, ELuxRevolverRoundType RoundType);
 
 	UFUNCTION(BlueprintPure, Category = "Revolver|Reload")
 	bool IsRoundInsertionPending() const;
@@ -91,6 +98,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Revolver|Reload")
 	int32 GetRoundInsertSequence() const;
+
+	UFUNCTION(BlueprintPure, Category = "Revolver|Reload")
+	int32 GetActiveReloadPosition() const;
 
 	UFUNCTION(BlueprintPure, Category = "Revolver|Reload")
 	UAnimMontage* GetSingleRoundReloadMontage() const;
@@ -179,7 +189,6 @@ private:
 	void ConfirmLocalFire(uint16 RequestId, bool bAccepted, bool bDryFire);
 	void ClearPendingRoundInsertion();
 	void CommitPendingRoundInsertion();
-	int32 FindNextEmptyChamber(int32 StartIndex) const;
 	bool IsLocallyPresented() const;
 	bool IsRemotelyPresented() const;
 	bool IsValidChamberIndex(int32 ChamberIndex) const;
@@ -205,6 +214,7 @@ private:
 	bool TryCancelReload();
 	bool TryCloseCylinder();
 	bool TryOpenCylinder();
+	void AdvanceCurrentChamber();
 	void ConsumeCurrentRoundAndAdvance();
 	void RefreshLoadedMask();
 	void RefreshBulletVisuals();
@@ -249,6 +259,10 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_RoundInsertSequence, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver|Reload", meta = (AllowPrivateAccess = "true"))
 	int32 RoundInsertSequence = 0;
+
+	// One-based visual position. Position 1 is always the chamber that will fire next.
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Revolver|Reload", meta = (AllowPrivateAccess = "true"))
+	uint8 ActiveReloadPosition = 1;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload")
 	TSoftObjectPtr<UAnimMontage> SingleRoundReloadMontage;
@@ -331,13 +345,6 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload", meta = (ClampMin = "0.1"))
 	float ReloadPresentationPlayRate = 1.0f;
 
-	// R21's first visible single-round insertion starts here and lands at 2.88 seconds.
-	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload", meta = (ClampMin = "0.0"))
-	float RoundInsertMontageStartSeconds = 2.2f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload", meta = (ClampMin = "0.05"))
-	float RoundInsertMontageCommitSeconds = 2.88f;
-
 	UPROPERTY(EditDefaultsOnly, Category = "Revolver|Reload", meta = (ClampMin = "0.0"))
 	float RoundInsertSettleDelaySeconds = 0.18f;
 
@@ -372,7 +379,6 @@ private:
 	int32 OwnerFirePresentationCount = 0;
 	int32 OwnerDryFirePresentationCount = 0;
 
-	uint8 ReloadChamberIndex = 0;
 	uint8 PendingRoundChamberIndex = ChamberCount;
 	ELuxRevolverRoundType PendingRoundType = ELuxRevolverRoundType::Empty;
 	FTimerHandle RoundInsertionTimer;

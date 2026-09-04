@@ -16,6 +16,7 @@ public class PROJECT_LUX : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new[]
 		{
 			"EnhancedInput",
+			"InputCore",
 			"Niagara",
 			"OnlineBase",
 			"OnlineSubsystem",

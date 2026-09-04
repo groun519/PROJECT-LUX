@@ -35,11 +35,11 @@ public:
 	void LuxSessionStatus();
 
 	UFUNCTION(Exec, BlueprintCallable, Category = "Development|Revolver", meta = (DevelopmentOnly))
-	void LuxLoadRound(FString RoundType);
+	void LuxLoadRound(FString RoundType, int32 ReloadPosition = 1);
 
 private:
 	UFUNCTION(Server, Reliable)
-	void ServerLoadRoundForDevelopment(ELuxRevolverRoundType RoundType);
+	void ServerLoadRoundForDevelopment(ELuxRevolverRoundType RoundType, uint8 ReloadPosition);
 
 	UFUNCTION()
 	void HandleDevelopmentFindSessionsComplete(bool bWasSuccessful, int32 ResultCount);

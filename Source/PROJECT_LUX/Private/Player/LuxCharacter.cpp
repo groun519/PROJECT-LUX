@@ -13,9 +13,11 @@
 #include "GameFramework/PlayerController.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
+#include "InputCoreTypes.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
 #include "Player/LuxFirstPersonAnimInstance.h"
+#include "Player/LuxPlayerController.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Weapons/LuxRevolver.h"
 
@@ -378,6 +380,15 @@ void ALuxCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Completed, this, &ALuxCharacter::AimStopped);
 		EnhancedInputComponent->BindAction(AimAction, ETriggerEvent::Canceled, this, &ALuxCharacter::AimStopped);
 	}
+
+	// Until the inventory phase supplies an actual carried round, number keys are a
+	// non-Shipping Live-round driver for validating the final manual chamber flow.
+	PlayerInputComponent->BindKey(EKeys::One, IE_Pressed, this, &ALuxCharacter::ReloadPosition1);
+	PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ALuxCharacter::ReloadPosition2);
+	PlayerInputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ALuxCharacter::ReloadPosition3);
+	PlayerInputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ALuxCharacter::ReloadPosition4);
+	PlayerInputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ALuxCharacter::ReloadPosition5);
+	PlayerInputComponent->BindKey(EKeys::Six, IE_Pressed, this, &ALuxCharacter::ReloadPosition6);
 }
 
 void ALuxCharacter::AimStarted(const FInputActionValue& Value)
@@ -474,6 +485,59 @@ void ALuxCharacter::Reload(const FInputActionValue& Value)
 	{
 		EquippedRevolver->RequestCloseCylinder();
 	}
+}
+
+void ALuxCharacter::ReloadPosition1()
+{
+	ReloadAtPosition(1);
+}
+
+void ALuxCharacter::ReloadPosition2()
+{
+	ReloadAtPosition(2);
+}
+
+void ALuxCharacter::ReloadPosition3()
+{
+	ReloadAtPosition(3);
+}
+
+void ALuxCharacter::ReloadPosition4()
+{
+	ReloadAtPosition(4);
+}
+
+void ALuxCharacter::ReloadPosition5()
+{
+	ReloadAtPosition(5);
+}
+
+void ALuxCharacter::ReloadPosition6()
+{
+	ReloadAtPosition(6);
+}
+
+void ALuxCharacter::ReloadAtPosition(int32 ReloadPosition)
+{
+#if UE_BUILD_SHIPPING
+	(void)ReloadPosition;
+#else
+	if (
+		bIsDead
+		|| !EquippedRevolver
+		|| !EquippedRevolver->IsCylinderOpen()
+		|| EquippedRevolver->IsRoundInsertionPending()
+		|| EquippedRevolver->IsReloadPositionLoaded(ReloadPosition)
+	)
+	{
+		return;
+	}
+
+	if (ALuxPlayerController* PlayerController = Cast<ALuxPlayerController>(GetController()))
+	{
+		PlayerController->LuxLoadRound(TEXT("Live"), ReloadPosition);
+	}
+#endif
 }
 
 void ALuxCharacter::Move(const FInputActionValue& Value)

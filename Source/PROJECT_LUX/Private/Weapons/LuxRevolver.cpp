@@ -35,6 +35,37 @@ namespace
 		FName(TEXT("Bullet_5")),
 		FName(TEXT("Bullet_6"))
 	};
+	// The R21 sequence inserts into the six visible cylinder positions without rotating
+	// the Drum bone. These windows were verified by scrubbing the source animation.
+	constexpr float R21RoundInsertStartSeconds[ALuxRevolver::ChamberCount] = {
+		2.67f,
+		3.47f,
+		4.37f,
+		5.28f,
+		6.27f,
+		7.34f
+	};
+	constexpr float R21RoundInsertCommitSeconds[ALuxRevolver::ChamberCount] = {
+		3.17f,
+		4.07f,
+		5.01f,
+		5.94f,
+		6.91f,
+		7.94f
+	};
+
+	bool TryGetR21RoundInsertWindow(int32 ReloadPosition, float& OutStartSeconds, float& OutCommitSeconds)
+	{
+		if (ReloadPosition < 1 || ReloadPosition > ALuxRevolver::ChamberCount)
+		{
+			return false;
+		}
+
+		const int32 WindowIndex = ReloadPosition - 1;
+		OutStartSeconds = R21RoundInsertStartSeconds[WindowIndex];
+		OutCommitSeconds = R21RoundInsertCommitSeconds[WindowIndex];
+		return true;
+	}
 
 	const TCHAR* LexToString(ELuxRevolverRoundType RoundType)
 	{
@@ -94,7 +125,7 @@ ALuxRevolver::ALuxRevolver()
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> WeaponMeshFinder(
 		TEXT("/Game/RevolverFPGM/System/FPWeapon/Mesh/Revolver/SKM_Revolver_NoClip.SKM_Revolver_NoClip"));
 	static ConstructorHelpers::FClassFinder<UAnimInstance> WeaponAnimClassFinder(
-		TEXT("/Game/RevolverFPGM/System/FPWeapon/Mesh/Revolver/ABP_Revolver"));
+		TEXT("/Game/LUX/Animation/Revolver/ABP_LuxRevolver"));
 	if (WeaponMeshFinder.Succeeded())
 	{
 		FirstPersonWeaponMesh->SetSkeletalMeshAsset(WeaponMeshFinder.Object);
@@ -168,6 +199,7 @@ void ALuxRevolver::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ALuxRevolver, FireSequence);
 	DOREPLIFETIME(ALuxRevolver, DryFireSequence);
 	DOREPLIFETIME(ALuxRevolver, bRoundInsertionPending);
+	DOREPLIFETIME(ALuxRevolver, ActiveReloadPosition);
 	DOREPLIFETIME(ALuxRevolver, ReloadSequence);
 	DOREPLIFETIME(ALuxRevolver, RoundInsertSequence);
 }
@@ -202,6 +234,21 @@ bool ALuxRevolver::IsCylinderOpen() const
 bool ALuxRevolver::IsChamberLoaded(int32 ChamberIndex) const
 {
 	return IsValidChamberIndex(ChamberIndex) && (LoadedMask & (1u << ChamberIndex)) != 0;
+}
+
+int32 ALuxRevolver::GetChamberIndexForReloadPosition(int32 ReloadPosition) const
+{
+	if (ReloadPosition < 1 || ReloadPosition > ChamberCount || !IsValidChamberIndex(CurrentChamberIndex))
+	{
+		return INDEX_NONE;
+	}
+
+	return (CurrentChamberIndex + ReloadPosition - 1) % ChamberCount;
+}
+
+bool ALuxRevolver::IsReloadPositionLoaded(int32 ReloadPosition) const
+{
+	return IsChamberLoaded(GetChamberIndexForReloadPosition(ReloadPosition));
 }
 
 void ALuxRevolver::RequestFire()
@@ -361,13 +408,20 @@ void ALuxRevolver::OnRep_ReloadSequence()
 		return;
 	}
 
+	float StartSeconds = 0.0f;
+	float CommitSeconds = 0.0f;
+	if (!TryGetR21RoundInsertWindow(ActiveReloadPosition, StartSeconds, CommitSeconds))
+	{
+		return;
+	}
+
 	if (IsLocallyPresented())
 	{
-		PlayReloadPresentation(RoundInsertMontageStartSeconds);
+		PlayReloadPresentation(StartSeconds);
 	}
 	else if (IsRemotelyPresented())
 	{
-		PlayThirdPersonReloadPresentation(RoundInsertMontageStartSeconds);
+		PlayThirdPersonReloadPresentation(StartSeconds);
 	}
 }
 
@@ -410,10 +464,12 @@ void ALuxRevolver::RequestCancelReload()
 	ServerCancelReload();
 }
 
-bool ALuxRevolver::BeginRoundInsertion(ELuxRevolverRoundType RoundType)
+bool ALuxRevolver::BeginRoundInsertion(int32 ReloadPosition, ELuxRevolverRoundType RoundType)
 {
 	ALuxCharacter* EquippedCharacter = Cast<ALuxCharacter>(GetOwner());
-	const int32 EmptyChamberIndex = FindNextEmptyChamber(ReloadChamberIndex);
+	const int32 ChamberIndex = GetChamberIndexForReloadPosition(ReloadPosition);
+	float StartSeconds = 0.0f;
+	float CommitSeconds = 0.0f;
 	if (
 		!HasAuthority()
 		|| !CanManipulateCylinder(EquippedCharacter)
@@ -421,7 +477,9 @@ bool ALuxRevolver::BeginRoundInsertion(ELuxRevolverRoundType RoundType)
 		|| bRoundInsertionPending
 		|| RoundType <= ELuxRevolverRoundType::Empty
 		|| RoundType > ELuxRevolverRoundType::Rubber
-		|| !IsValidChamberIndex(EmptyChamberIndex)
+		|| !IsValidChamberIndex(ChamberIndex)
+		|| ChamberRoundTypes[ChamberIndex] != ELuxRevolverRoundType::Empty
+		|| !TryGetR21RoundInsertWindow(ReloadPosition, StartSeconds, CommitSeconds)
 	)
 	{
 		LastReloadResultForDevelopment = TEXT("Rejected");
@@ -429,23 +487,24 @@ bool ALuxRevolver::BeginRoundInsertion(ELuxRevolverRoundType RoundType)
 	}
 
 	PendingRoundType = RoundType;
-	PendingRoundChamberIndex = static_cast<uint8>(EmptyChamberIndex);
+	PendingRoundChamberIndex = static_cast<uint8>(ChamberIndex);
+	ActiveReloadPosition = static_cast<uint8>(ReloadPosition);
 	bRoundInsertionPending = true;
 	++ReloadSequence;
 	LastReloadResultForDevelopment = TEXT("InsertPending");
 	ForceNetUpdate();
 	if (IsLocallyPresented())
 	{
-		PlayReloadPresentation(RoundInsertMontageStartSeconds);
+		PlayReloadPresentation(StartSeconds);
 	}
 	else if (IsRemotelyPresented())
 	{
-		PlayThirdPersonReloadPresentation(RoundInsertMontageStartSeconds);
+		PlayThirdPersonReloadPresentation(StartSeconds);
 	}
 
 	const float SafePlayRate = FMath::Max(ReloadPresentationPlayRate, 0.1f);
 	const float CommitDelaySeconds = FMath::Max(
-		RoundInsertMontageCommitSeconds - RoundInsertMontageStartSeconds,
+		CommitSeconds - StartSeconds,
 		0.05f
 	) / SafePlayRate;
 	if (!GetWorld())
@@ -479,6 +538,11 @@ int32 ALuxRevolver::GetReloadSequence() const
 int32 ALuxRevolver::GetRoundInsertSequence() const
 {
 	return RoundInsertSequence;
+}
+
+int32 ALuxRevolver::GetActiveReloadPosition() const
+{
+	return ActiveReloadPosition;
 }
 
 UAnimMontage* ALuxRevolver::GetSingleRoundReloadMontage() const
@@ -637,6 +701,7 @@ bool ALuxRevolver::ResolveServerFire(bool& bOutDryFire)
 		++DryFireSequence;
 		LastFireResultForDevelopment = TEXT("DryFire");
 		OnDryFire.Broadcast(this);
+		AdvanceCurrentChamber();
 		ForceNetUpdate();
 		if (IsRemotelyPresented())
 		{
@@ -786,7 +851,6 @@ void ALuxRevolver::CommitPendingRoundInsertion()
 	}
 
 	ChamberRoundTypes[ChamberIndex] = RoundType;
-	ReloadChamberIndex = static_cast<uint8>((ChamberIndex + 1) % ChamberCount);
 	++RoundInsertSequence;
 	LastReloadResultForDevelopment = TEXT("Inserted");
 	RefreshLoadedMask();
@@ -799,25 +863,6 @@ void ALuxRevolver::CommitPendingRoundInsertion()
 	{
 		PlayThirdPersonRoundInsertPresentation();
 	}
-}
-
-int32 ALuxRevolver::FindNextEmptyChamber(int32 StartIndex) const
-{
-	if (!IsValidChamberIndex(StartIndex))
-	{
-		return INDEX_NONE;
-	}
-
-	for (int32 Offset = 0; Offset < ChamberCount; ++Offset)
-	{
-		const int32 ChamberIndex = (StartIndex + Offset) % ChamberCount;
-		if (ChamberRoundTypes[ChamberIndex] == ELuxRevolverRoundType::Empty)
-		{
-			return ChamberIndex;
-		}
-	}
-
-	return INDEX_NONE;
 }
 
 bool ALuxRevolver::IsValidChamberIndex(int32 ChamberIndex) const
@@ -1278,7 +1323,6 @@ bool ALuxRevolver::TryOpenCylinder()
 	}
 
 	bCylinderOpen = true;
-	ReloadChamberIndex = CurrentChamberIndex;
 	LastReloadResultForDevelopment = TEXT("Opened");
 	ForceNetUpdate();
 	if (IsLocallyPresented())
@@ -1320,8 +1364,13 @@ ALuxCharacter* ALuxRevolver::TraceCharacter(const ALuxCharacter* EquippedCharact
 void ALuxRevolver::ConsumeCurrentRoundAndAdvance()
 {
 	ChamberRoundTypes[CurrentChamberIndex] = ELuxRevolverRoundType::Empty;
-	CurrentChamberIndex = static_cast<uint8>((CurrentChamberIndex + 1) % ChamberCount);
+	AdvanceCurrentChamber();
 	RefreshLoadedMask();
+}
+
+void ALuxRevolver::AdvanceCurrentChamber()
+{
+	CurrentChamberIndex = static_cast<uint8>((CurrentChamberIndex + 1) % ChamberCount);
 }
 
 void ALuxRevolver::RefreshLoadedMask()

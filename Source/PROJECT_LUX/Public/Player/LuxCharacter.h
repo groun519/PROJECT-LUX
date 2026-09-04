@@ -80,6 +80,13 @@ private:
 	void UpdateFirstPersonPresentation(float DeltaSeconds);
 	void Fire(const FInputActionValue& Value);
 	void Reload(const FInputActionValue& Value);
+	void ReloadPosition1();
+	void ReloadPosition2();
+	void ReloadPosition3();
+	void ReloadPosition4();
+	void ReloadPosition5();
+	void ReloadPosition6();
+	void ReloadAtPosition(int32 ReloadPosition);
 	void SpawnDefaultRevolver();
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
