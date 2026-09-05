@@ -28,6 +28,10 @@
 
 ## 3. Current workspaces
 
+### `third-person-view-body-rotation-review/`
+
+`main@0275e299` 이후 로컬에서 진행한 uncommitted Root Yaw Offset 실험의 실패 분석. 입력/정책 값은 안정적이지만 실제 pelvis가 counter-rotate하지 않은 채 neck/head 계산만 visual-root 보정을 전제로 진행하는 현재 불일치를 측정값으로 기록한다. CHAT 논의를 위한 최소 재현 질문과 baseline -> root axis -> root-only -> head/neck -> spine/hand -> locomotion -> network 순서의 recovery gate를 포함한다.
+
 ### `revolver-presentation-architecture-rework/`
 
 `main@0275e299` 기준 Phase 01-E/F, Third-Person Aim IK, Manual Chamber Reload까지 다시 검수한 현재 구현 기준 문서. Gameplay Revolver, shared mechanical visual, FP/TP Presentation 책임을 분리하고 R21 animation timing이 production reload rule에 침투한 결합을 제거하는 implementation-ready architecture correction.
