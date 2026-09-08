@@ -28,6 +28,10 @@
 
 ## 3. Current workspaces
 
+### `third-person-view-body-rotation-high-end-plan/`
+
+`third-person-view-body-rotation-review/`의 실패 진단을 전제로 한 implementation-ready 보완 설계. `ULuxViewBodyRotationComponent`를 view/body semantic policy로 정리하고, 큰 idle turn은 curve-driven Turn-in-Place, head/spine/weapon의 최종 보정은 UE 5.8 Control Rig Full Body IK로 분리한다. current local diff의 fixed additive over-rotation, 실제 body catch-up 부재, derived presentation state 과복제, Character tick orchestration, revolver equipment gate를 함께 수정하며 VB-01~VB-07 순서로 local pose -> Turn-in-Place -> upper-body FBIK -> muzzle solve -> locomotion -> network를 단계 검증한다.
+
 ### `third-person-view-body-rotation-review/`
 
 `main@0275e299` 이후 로컬에서 진행한 uncommitted Root Yaw Offset 실험의 실패 분석. 입력/정책 값은 안정적이지만 실제 pelvis가 counter-rotate하지 않은 채 neck/head 계산만 visual-root 보정을 전제로 진행하는 현재 불일치를 측정값으로 기록한다. CHAT 논의를 위한 최소 재현 질문과 baseline -> root axis -> root-only -> head/neck -> spine/hand -> locomotion -> network 순서의 recovery gate를 포함한다.
