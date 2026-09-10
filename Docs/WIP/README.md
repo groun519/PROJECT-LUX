@@ -30,7 +30,7 @@
 
 ### `third-person-view-body-rotation-high-end-plan/`
 
-`third-person-view-body-rotation-review/`의 실패 진단을 전제로 한 implementation-ready 보완 설계. `ULuxViewBodyRotationComponent`를 view/body semantic policy로 정리하고, 큰 idle turn은 curve-driven Turn-in-Place, head/spine/weapon의 최종 보정은 UE 5.8 Control Rig Full Body IK로 분리한다. current local diff의 fixed additive over-rotation, 실제 body catch-up 부재, derived presentation state 과복제, Character tick orchestration, revolver equipment gate를 함께 수정하며 VB-01~VB-07 순서로 local pose -> Turn-in-Place -> upper-body FBIK -> muzzle solve -> locomotion -> network를 단계 검증한다.
+`third-person-view-body-rotation-review/`의 실패 진단을 전제로 한 implementation-ready 보완 설계. `ULuxViewBodyRotationComponent`를 canonical `VisualBodyYaw` 중심의 view/body semantic policy로 정리하고, idle에서 **고개/목만으로 옆을 보는 quick side glance**, sustained look의 지연 body catch-up, comfortable residual, curve-driven Turn-in-Place를 지원한다. upper-body는 하나의 monolithic FBIK가 아니라 Control Rig의 **Look Distribution pass**와 **Revolver Weapon Aim pass**로 분리하며, head/neck/spine의 서로 다른 응답 시간, anatomical yaw/pitch envelope, Hip Fire aim pulse, minimal network state까지 포함한다. VB-01~VB-07 순서로 root/body contract -> free-look/body follow -> Turn-in-Place -> look solve -> weapon aim -> locomotion -> network를 단계 검증한다.
 
 ### `third-person-view-body-rotation-review/`
 
