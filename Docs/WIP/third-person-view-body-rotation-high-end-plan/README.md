@@ -1976,6 +1976,114 @@ VB-02 검수 전 VB-03로 자동 진행하지 않는다.
 
 ---
 
+## VB-03 - Look Distribution
+
+### Work
+
+- create / update `CR_LuxUpperBodyPresentation` Look pass
+- source yaw from ViewBodyResidual
+- head-first response
+- neck second
+- progressive upper-spine participation
+- different response timing
+- combined yaw / pitch anatomical envelope
+- remove fixed additive 15/20/25 + 35/65 final chain
+- preserve gaze while body turns underneath
+
+### Gate
+
+- small glance reads clearly as head-led
+- medium side look adds neck / upper torso naturally
+- 90+ deg look remains readable without grotesque twist
+- no 160% over-rotation
+- no roll contamination
+- body turn naturally releases residual
+- no common shared-response robotic motion
+
+### Stop rule
+
+VB-03 검수 전 VB-04로 자동 진행하지 않는다.
+
+---
+
+## VB-04 - Revolver Weapon Aim
+
+### Work
+
+- keep current convergence / parallax target math
+- convert target into typed muzzle / hand effector input
+- remove direct hand-only final correction
+- distribute across chest / clavicle / arm
+- wrist handles final residual
+- separate WeaponAimAlpha from Look
+- ADS sustained alpha
+- optional hip-fire pulse
+
+### Gate
+
+- relaxed side look does not drag gun rigidly with head
+- ADS muzzle presentation aligns
+- close target clamp remains stable
+- shoulder / elbow / wrist share correction
+- pelvis / feet never snap because of weapon aim
+- server ballistic result unchanged
+
+### Stop rule
+
+VB-04 검수 전 VB-05로 자동 진행하지 않는다.
+
+---
+
+## VB-05 - Movement Presentation Polish
+
+### Work
+
+- inspect current `BS_Lux_Locomotion` local changes
+- verify body-facing-movement UX across forward / side / backward inputs
+- simplify directional blend requirements if body orientation makes them redundant
+- polish turn-to-move / move-to-idle transitions
+- foot stabilization only if measured necessary
+- isolated Orientation Warping experiment only if a concrete artifact remains
+
+### Gate
+
+- travel direction and body presentation do not contradict each other
+- View can remain off-body while moving
+- no body snap on movement start
+- no obvious foot skate
+- no double spine twist
+
+### Stop rule
+
+VB-05 검수 전 VB-06으로 자동 진행하지 않는다.
+
+---
+
+## VB-06 - Multiplayer Presentation QA
+
+### Work
+
+- confirm minimal network state
+- 2 / 3 player PIE
+- host + client ownership cases
+- 50ms / 100ms latency
+- JIP
+- repeated continuous spin
+- movement while looking away
+- ADS while moving / turning
+
+### Gate
+
+- owner has immediate response
+- observer reads the same movement / attention intent
+- remote body direction stable
+- remote head look stable
+- no packet-step neck twitch
+- no stale turn event replay
+- no wrap-direction reversal
+
+---
+
 # 15. Debug measurements
 
 각 checkpoint에서 화면 느낌과 함께 최소 다음 값을 본다.
