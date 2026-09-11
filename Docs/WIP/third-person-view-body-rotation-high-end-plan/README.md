@@ -1091,90 +1091,516 @@ Output Pose
 
 ---
 
+
 # 14. Revised implementation checkpoints
 
-기존 VB-01 / VB-02는 통합한다.
+## Scope freeze
 
-새 순서:
+현재 local working tree는 이미 기존 VB-01/02 실험 위에 많은 변경이 쌓여 있다.
 
-```text
+따라서 현재 단계에서는 checkpoint 순서를 다시 삽입하거나 renumber하지 않는다.
+
+고정 순서:
+
+~~~text
 VB-01  View / Body Intent Foundation
 VB-02  Turn-in-Place
 VB-03  Look Distribution
 VB-04  Revolver Weapon Aim
 VB-05  Movement Presentation Polish
 VB-06  Multiplayer Presentation QA
-```
+~~~
+
+현재 집중 범위는 **VB-01과 VB-02뿐**이다.
+
+다음 항목은 필요성이 확정되어 있지만 지금 checkpoint에 끼워 넣지 않는다.
+
+~~~text
+Future locomotion state work
+- Crouch
+- Walk
+- Jog
+- Sprint
+- Jump / Fall / Land
+
+Future combat collision work
+- capsule-only weapon hit 제거
+- Skeletal Mesh / Physics Asset 기반 weapon trace
+- dedicated weapon trace channel
+~~~
+
+이 항목들은 VB-01/02를 끝낸 뒤 별도 계획으로 배치한다.
+
+단, VB-01/02가 미래 locomotion state 추가를 막는 hard-coded 구조를 만들면 안 된다.
 
 ---
 
 ## VB-01 - View / Body Intent Foundation
 
-### Existing local foundation to keep
+### Purpose
 
-- `ULuxViewBodyRotationComponent`
-- canonical `VisualBodyYaw`
+VB-01은 **Visual Body가 어느 방향을 향해야 하는가**를 완전히 결정한다.
+
+이 단계의 완료 기준은 애니메이션이 예쁜지가 아니다.
+
+~~~text
+View
+Movement
+Turn intent
+ADS context
+        ↓
+DesiredVisualBodyYaw
+        ↓
+VisualBodyYaw
+        ↓
+ViewBodyResidual
+~~~
+
+이 semantic chain이 owner / authority / remote에서 일관되고, 여러 바퀴 회전과 +-180 wrap에서도 방향 의도가 깨지지 않는 것이 목표다.
+
+발 움직임과 Turn-in-Place의 최종 품질은 VB-02가 소유한다.
+
+### Existing local foundation - Keep
+
+현재 local implementation에서 다음 구조는 유지한다.
+
+- ULuxViewBodyRotationComponent
 - component-owned Tick
-- AnimInstance-derived `RootYawOffset`
-- minimal `VisualBodyYaw` replication
-- equipped-revolver condition correction
+- canonical VisualBodyYaw
+- AnimInstance에서 파생하는 RootYawOffset
+- VisualBodyYaw의 최소 replication / COND_SkipOwner
+- actual equipped revolver를 확인하는 upper-body condition
+- Character가 controller yaw를 유지하는 현재 gameplay control model
 
-### Rework
+현재 dirty local을 초기화하거나 이전 implementation으로 되돌리는 것을 VB-01 작업에 포함하지 않는다.
 
-- replace View-follow body policy with movement / turn-intent body policy
-- derive valid MovementDirectionYaw
-- idle body holds orientation by default
-- add wrap-safe signed View delta
-- preserve continuous same-direction turn intent
-- add anatomical soft / hard envelope around approximately 100-110 deg
-- allow continuous turn to move body before hard limit
-- remove dwell-only body catch-up
-- ADS may tighten residual / response without owning the whole body
-- expose ViewBodyResidual based on VisualBodyYaw
-- stop using Actor-relative yaw as the final Look residual
+### Non-goals
 
-### Gate
+VB-01에서는 하지 않는다.
 
-**Idle glance**
+- Crouch / Walk / Sprint / Jump 입력 추가
+- locomotion animation asset 교체
+- Turn-in-Place animation 완성
+- head / neck / spine 최종 분배
+- Control Rig Look solve
+- weapon arm IK 개선
+- Physics Asset weapon hit collision
+- ragdoll
+- generic movement-state framework
 
-- stand still
-- turn view approximately 30 deg
-- pelvis / feet remain nearly fixed
-- no body auto-follow after waiting
+### Canonical semantic contract
 
-**Held side look**
+#### PresentationViewYaw
 
-- hold approximately 60-90 deg for several seconds
-- body does not center just because time passed
-- residual remains stable
+다른 플레이어가 보아야 하는 플레이어의 현재 시선 yaw.
 
-**Movement**
+owner에서는 local view에 즉시 반응한다.
 
-- begin moving in a direction different from View
-- visual body turns toward actual movement direction
-- head / upper body can continue looking elsewhere
+#### MovementDirectionYaw
 
-**Continuous spin**
+유효한 horizontal movement가 있을 때 실제 이동 방향.
 
-- rotate view continuously right for multiple full revolutions
-- body follows right
-- no head left/right flip at +-180
-- repeat left
+기본 source는 실제 horizontal velocity다.
 
-**Anatomical limit**
+단, movement start 직후 velocity가 아직 거의 0인 구간 때문에 body target이 불안정해지는 것이 확인되면 current movement input / acceleration을 **초기 방향 힌트**로만 사용할 수 있다.
 
-- push View-Body residual toward approximately 100-110 deg
-- body recovers enough range before impossible pose
-- gaze target remains continuous
+실제 이동이 발생한 뒤에는 velocity가 truth다.
 
-**ADS**
+#### DesiredVisualBodyYaw
 
-- ADS can reduce preferred residual
-- no camera/input blocking
+현재 policy가 몸 전체에 요구하는 목표 방향.
 
-**Measured truth**
+이 값은 다음 이유에 의해서만 바뀐다.
 
-- calculated VisualBodyYaw matches measured pelvis/body visual orientation within expected graph offset
+1. Movement
+2. Continuous same-direction turn intent
+3. Anatomical-limit correction
+4. ADS / 이후 명시적으로 허용한 strong-action context
+
+**단순 dwell time은 이유가 아니다.**
+
+#### VisualBodyYaw
+
+실제로 presentation body가 향하고 있다고 간주하는 canonical yaw.
+
+VB-01에서 숫자/방향 계약을 검증한다.
+
+VB-02 이후에는 idle Turn-in-Place execution과 동기화된 실제 presentation 결과를 계속 이 값으로 표현한다.
+
+#### ViewBodyResidualYaw
+
+~~~text
+Delta(VisualBodyYaw, PresentationViewYaw)
+~~~
+
+Head / Neck / Spine가 이후 표현해야 할 yaw의 canonical source다.
+
+BaseAimRotation - ActorRotation을 최종 Look yaw truth로 사용하지 않는다.
+
+#### RootYawOffset
+
+canonical state가 아니다.
+
+~~~text
+RootYawOffset
+= Delta(ActorYaw, VisualBodyYaw)
+~~~
+
+AnimInstance / graph adapter에서 파생한다.
+
+### Update order
+
+한 frame에서 policy 계산 순서를 고정한다.
+
+~~~text
+1. Read presentation view
+2. Compute signed wrap-safe frame view delta
+3. Update view angular velocity / same-direction turn continuity
+4. Resolve horizontal movement state and MovementDirectionYaw
+5. Resolve body target cause / priority
+6. Produce DesiredVisualBodyYaw
+7. Apply body angular response
+8. Produce VisualBodyYaw
+9. Derive ViewBodyResidualYaw
+10. Replicate canonical body yaw only when authority requires it
+~~~
+
+derived state가 이 순서를 역으로 drive하지 않는다.
+
+### Body-target priority
+
+#### A. Ground movement
+
+실제 horizontal movement가 충분하면 Movement Direction이 기본 body target이다.
+
+~~~text
+moving
+→ DesiredVisualBodyYaw ≈ MovementDirectionYaw
+~~~
+
+View는 body target을 직접 덮어쓰지 않는다.
+
+이동하면서 옆을 보는 표현은 ViewBodyResidual로 남긴다.
+
+#### B. Idle continuous turn intent
+
+이동하지 않고 player가 같은 방향으로 계속 view를 회전하면 body가 그 방향으로 뒤따를 수 있다.
+
+판단 신호:
+
+- signed frame view delta
+- view angular velocity
+- same-direction continuity
+- current residual magnitude
+- anatomical limit proximity
+
+~~~text
+quick look and stop
+→ no continuous-turn body chase
+
+keep rotating right
+→ right-turn intent grows
+→ body follows right
+~~~
+
+player가 mouse rotation을 멈추면 body가 View center까지 자동 추적하지 않는다.
+
+현재 body orientation에서 안정화하거나 필요한 anatomical correction만 수행한다.
+
+#### C. Anatomical-limit correction
+
+abs(ViewBodyResidualYaw)가 허용 표현 범위를 넘어가려고 하면 body가 최소한으로 따라간다.
+
+초기 tuning range:
+
+~~~text
+comfortable expressive region   0 - about 90 deg
+soft protection region          about 90 - 100 deg
+hard maximum target             about 100 - 110 deg
+~~~
+
+정확한 값은 skeleton visual test에서 확정한다.
+
+hard limit에 도달한 프레임에 snap하지 않는다.
+
+soft region에서 body correction이 자연스럽게 증가해야 한다.
+
+#### D. ADS context
+
+ADS는 body ownership을 바꾸지 않는다.
+
+허용되는 변화:
+
+- preferred residual 축소
+- continuous-turn follow sensitivity 증가
+- anatomical soft zone이 조금 일찍 시작
+- body response speed 증가
+
+금지:
+
+- ADS 시작 순간 body snap
+- camera 제한
+- movement direction 무시
+- ADS가 끝났다고 반대 방향 body chase
+
+### Continuous-turn contract
+
+#### Wrap-safe signed delta
+
+normalized yaw를 저장하더라도 frame delta는 항상 wrap-safe shortest signed delta로 계산한 뒤 누적한다.
+
+예:
+
+~~~text
+178
+179
+-179
+-178
+~~~
+
+가 실제 오른쪽 회전이면:
+
+~~~text
++1
++2
++1
+~~~
+
+처럼 같은 signed turn intent로 이어져야 한다.
+
+#### Same-direction continuity
+
+한두 frame의 mouse noise 때문에 turn direction이 즉시 뒤집히지 않는다.
+
+필요하면 매우 작은 angular velocity dead zone을 사용한다.
+
+하지만 긴 dwell timer로 body follow를 시작하지 않는다.
+
+#### Direction reversal
+
+오른쪽으로 회전하다 즉시 왼쪽으로 반전하면:
+
+~~~text
+old right intent decays / cancels
+→ body angular velocity brakes
+→ new left intent takes over
+~~~
+
+body가 한 frame에 반대 방향으로 튀면 안 된다.
+
+#### Multi-revolution
+
+2~3회전이 아니라 이론상 임의 횟수 회전에서도 동일해야 한다.
+
+normalized API output과 내부 turn intent를 혼동하지 않는다.
+
+### Movement edge cases
+
+#### Speed threshold
+
+정지/이동 경계에서 body target source가 매 frame idle/movement로 흔들리지 않도록 작은 hysteresis 또는 안정된 movement threshold를 둔다.
+
+#### Sudden movement direction change
+
+앞으로 이동하다 왼쪽으로 즉시 방향을 바꿔도 body target은 새 movement 방향으로 연속적으로 이동한다.
+
+snap 금지.
+
+#### Stop moving while looking elsewhere
+
+이동이 끝나는 순간:
+
+~~~text
+VisualBodyYaw = last resolved body orientation
+View remains independent
+~~~
+
+정지했다고 View 방향으로 자동 center하지 않는다.
+
+#### Future Walk / Sprint / Crouch
+
+VB-01은 speed mode 이름으로 body policy를 hard-code하지 않는다.
+
+향후 Walk / Jog / Sprint가 추가되어도 기본 truth는 actual movement direction이다.
+
+Crouch / Jump는 향후 explicit context를 추가할 수 있지만 현재 구현 범위가 아니다.
+
+### Lifecycle edge cases
+
+#### Spawn / possession / restart
+
+초기 VisualBodyYaw는 현재 Actor orientation과 일치시켜 첫 frame에 큰 residual이 생기지 않게 한다.
+
+#### Death
+
+death 이후 새로운 body-follow policy를 계속 적분하지 않는다.
+
+현재 death presentation의 final orientation을 안정적으로 유지하거나 현재 기존 death rule을 따른다.
+
+#### Teleport / authoritative large correction
+
+큰 teleport / possession correction처럼 정상 turn이 아닌 yaw discontinuity가 감지되면 continuous-turn intent로 해석하지 않는다.
+
+필요하면 explicit reset entrypoint를 둔다.
+
+generic event system은 만들지 않는다.
+
+### Network contract
+
+#### Owner
+
+- local view 즉시 사용
+- local body policy 즉시 실행
+- server replicated yaw가 owner prediction을 되감지 않음
+
+#### Authority
+
+- 같은 semantic policy로 canonical body orientation 계산
+- 필요한 VisualBodyYaw만 remote용으로 replicate
+
+#### Simulated proxy
+
+- body policy를 중복 적분하지 않음
+- replicated canonical orientation 사용
+- bone solve는 local animation에서 derive
+
+#### Network non-goals
+
+다음은 replicate하지 않는다.
+
+- RootYawOffset
+- turn-intent strength
+- signed frame view delta
+- head / neck / spine rotations
+- animation curve progress
+- Control Rig outputs
+
+VB-02에서 Turn-in-Place event synchronization이 실제로 필요한 것이 확인될 때만 최소 semantic event를 검토한다.
+
+### Implementation order
+
+현재 dirty local 위에서 순서를 고정한다.
+
+#### VB-01A - Baseline capture
+
+코드를 바꾸기 전에 현재 상태를 캡처한다.
+
+최소:
+
+- idle 0 / +-30 / +-60 / +-90
+- right continuous spin
+- left continuous spin
+- movement forward / left / right while View differs
+- ADS on / off
+
+기존 문제를 영상 또는 debug 값으로 남긴다.
+
+#### VB-01B - Semantic input correction
+
+- PresentationViewYaw source 확정
+- MovementDirectionYaw 추가
+- ViewBodyResidualYaw를 canonical output으로 정리
+- AnimInstance Look yaw가 Actor-relative truth에 의존하지 않도록 이후 VB-03용 source 준비
+
+아직 head/spine final solve를 바꾸지 않는다.
+
+#### VB-01C - Body target policy replacement
+
+현재 Actor/View-follow 중심 relaxed / moving policy를 제거 또는 축소한다.
+
+대신:
+
+- movement body target
+- idle hold
+- anatomical correction
+- ADS adjustment
+
+을 구현한다.
+
+#### VB-01D - Continuous turn
+
+- wrap-safe signed view delta
+- turn angular velocity
+- same-direction continuity
+- reversal braking
+- multi-revolution body follow
+
+을 구현한다.
+
+#### VB-01E - Root / pelvis truth verification
+
+계산값만 보지 않는다.
+
+다음을 같은 프레임에서 측정한다.
+
+- ActorYaw
+- PresentationViewYaw
+- DesiredVisualBodyYaw
+- VisualBodyYaw
+- RootYawOffset
+- actual measured pelvis / visual body yaw
+
+현재 diagnostic assets는 이 검증에 사용 가능하다.
+
+#### VB-01F - Owner / authority / proxy sanity
+
+최소 2-player PIE에서:
+
+- owner immediate response
+- host-owned character
+- client-owned character
+- remote VisualBodyYaw
+- no owner correction pop
+
+을 확인한다.
+
+이 단계는 최종 network polish가 아니라 VB-01 semantic sanity gate다.
+
+### VB-01 acceptance matrix
+
+| Case | Expected |
+|---|---|
+| Idle +30 deg glance | body stays |
+| Idle +60 deg hold 5s | body stays; no dwell chase |
+| Idle +90 deg hold | expressive residual remains if skeleton envelope allows |
+| Approach 100-110 deg | body begins minimum anatomical recovery |
+| Continuous right spin | body keeps following right; no wrap flip |
+| Continuous left spin | same mirrored behavior |
+| Fast right -> left reversal | body brakes then reverses without snap |
+| Move forward, View right | body = movement, residual = right look |
+| Change movement direction | body target follows new travel direction smoothly |
+| Stop moving while View offset | body retains last orientation |
+| ADS enter / exit | tighter response allowed, no snap |
+| +-180 crossing | turn intent sign remains correct |
+| Spawn / restart | no first-frame large offset |
+| 2-player PIE | owner and observer body intent agree |
+
+### VB-01 completion gate
+
+VB-01은 아래가 모두 만족될 때만 완료다.
+
+1. body orientation source가 View-follow가 아니라 명시된 intent policy다.
+2. dwell-only body catch-up이 없다.
+3. multi-revolution turn이 양방향 모두 안정적이다.
+4. +-180 wrap에서 direction flip이 없다.
+5. movement direction과 body direction이 의미상 일치한다.
+6. ViewBodyResidual이 이후 Look solve의 올바른 canonical source다.
+7. calculated VisualBodyYaw와 실제 visual pelvis/body orientation이 일치한다.
+8. owner / authority / simulated proxy에서 큰 모순이 없다.
+9. 현재 로컬의 불필요한 diagnostic / editor 파일을 production change와 구분할 수 있다.
+10. 사용자 visual gate를 통과한다.
+
+### Known acceptable debt after VB-01
+
+VB-01 완료 시에도 다음은 남아도 된다.
+
+- 발 미끄러짐
+- turn step animation 부재
+- head / neck / spine가 아직 기존 임시 분배
+- weapon hand aim가 기존 방식
+- final locomotion polish 미완료
+
+이 debt를 이유로 VB-01 방향 계약을 다시 흔들지 않는다.
 
 ### Stop rule
 
@@ -1184,135 +1610,369 @@ VB-01 검수 전 VB-02로 자동 진행하지 않는다.
 
 ## VB-02 - Turn-in-Place
 
-### Work
+### Purpose
 
-- inventory existing left/right 90/180 turn assets
-- use project-owned assets / curves
-- trigger only when VB-01 actually moves idle body target
-- curve-driven yaw consumption if required
-- gaze preservation during turn
-- Inertialization
-- foot lock only if measured necessary
+VB-02는 **VB-01이 이미 결정한 idle body rotation을 실제 사람의 발과 골반 움직임으로 believable하게 표현한다.**
 
-### Gate
+VB-02는 body가 왜 돌아야 하는지 결정하지 않는다.
 
-- continuous idle turn produces believable feet
-- anatomical correction turn produces believable feet
-- simply holding a side look does not trigger a turn
-- head does not snap to center
-- no visible foot skating beyond accepted threshold
+~~~text
+VB-01
+Desired / resolved body turn intent
+        ↓
+VB-02
+How do the feet and pelvis perform that turn?
+~~~
+
+VB-02가 View / Movement 정책을 다시 판단하면 안 된다.
+
+### Inputs
+
+VB-02가 사용할 수 있는 semantic input:
+
+- current VisualBodyYaw
+- desired body yaw or signed body turn delta
+- body angular velocity
+- grounded / moving 여부
+- current ViewBodyResidual for gaze preservation
+- optional ADS context for animation selection only if visually required
+
+정확한 API는 구현 시 최소화한다.
+
+### Outputs
+
+VB-02의 결과:
+
+- selected turn direction
+- selected turn size / pose
+- turn animation playback
+- root / mesh yaw consumption presentation
+- optional foot-lock state
+- turn completion / interruption state
+
+bone transform 자체를 network truth로 만들지 않는다.
+
+### Non-goals
+
+VB-02에서는 하지 않는다.
+
+- VB-01 body target algorithm 변경
+- Crouch / Walk / Sprint / Jump 추가
+- final Look Distribution
+- weapon IK
+- Physics Asset hit collision
+- generic foot IK framework
+- Motion Matching 전환
+- full locomotion rewrite
+
+### Asset inventory first
+
+코드부터 작성하지 않는다.
+
+먼저 현재 사용 가능한 project / purchased asset에서 확인한다.
+
+우선 후보:
+
+~~~text
+Turn Left small / 45 if available
+Turn Right small / 45 if available
+Turn Left 90
+Turn Right 90
+Turn Left 180
+Turn Right 180
+~~~
+
+정확한 asset이 없다면 없는 상태를 기록하고 최소 project-owned solution을 만든다.
+
+Marketplace 원본 asset을 직접 destructive edit하지 않는다.
+
+### Turn size policy
+
+VB-01이 body target을 움직였다고 매번 90도 clip을 재생하면 안 된다.
+
+turn presentation은 남은 idle body delta에 맞춰 가장 자연스러운 규모를 선택한다.
+
+초기 의미:
+
+~~~text
+very small correction
+→ no authored step or subtle procedural/root response
+
+small / medium correction
+→ small turn asset if available
+
+large correction
+→ 90 turn
+
+very large correction
+→ 180 turn only if it improves the result
+~~~
+
+정확한 cutoff는 asset 실제 root/pelvis motion을 보고 결정한다.
+
+### Continuous spin behavior
+
+이 checkpoint의 핵심 테스트다.
+
+player가 계속 오른쪽으로 회전하면:
+
+~~~text
+head / upper-body lead is preserved
+VB-01 keeps producing rightward body intent
+VB-02 performs successive believable rightward body turns
+feet replant
+next turn can begin
+~~~
+
+금지:
+
+- 90도 clip 종료 때까지 View 입력 지연
+- clip 때문에 body turn intent sign이 뒤집힘
+- 매 clip 시작마다 head center reset
+- left/right animation ping-pong
+- turn completion 후 body가 View center를 과추적
+
+### Gaze preservation
+
+Turn-in-Place 동안 View target은 독립적이다.
+
+~~~text
+View fixed at world direction
+Body rotates toward its target
+→ ViewBodyResidual decreases naturally
+→ later Look Distribution unwinds naturally
+~~~
+
+VB-02가 head / neck 값을 0으로 reset하지 않는다.
+
+현재 VB-03가 아직 구현 전이라도 debug line / semantic residual 값으로 이 계약을 검증할 수 있어야 한다.
+
+### Yaw-consumption contract
+
+가장 중요한 구현 위험은 **body semantic yaw와 turn animation이 서로 두 번 회전시키는 것**이다.
+
+따라서 구현 전에 둘 중 하나의 계약을 명시적으로 선택하고 테스트한다.
+
+#### Preferred contract
+
+~~~text
+VB-01 supplies body turn target / intent.
+VB-02 turn execution owns the visible idle yaw progress.
+VisualBodyYaw represents the resolved visible body orientation.
+~~~
+
+즉 Turn-in-Place가 활성인 동안에는 authored turn progress와 실제 visible yaw가 하나의 progress source를 공유해야 한다.
+
+가능하면 project-owned TurnYaw curve 또는 동등한 deterministic progress를 사용한다.
+
+금지:
+
+~~~text
+VB-01 independently rotates VisualBodyYaw
++
+turn animation/root correction independently rotates again
+= double turn
+~~~
+
+#### Fallback contract
+
+사용 가능한 turn asset이 yaw progress curve를 안정적으로 제공하지 못하면:
+
+- VisualBodyYaw의 canonical angular response를 유지
+- turn asset은 pose/foot presentation만 보조
+- actual measured pelvis yaw가 canonical yaw와 중복되지 않도록 graph order를 맞춘다.
+
+어느 계약이 채택됐는지는 VB-02 Result에 기록한다.
+
+### Turn interruption
+
+#### Player starts moving during idle turn
+
+- locomotion이 우선한다.
+- turn pose를 자연스럽게 blend out한다.
+- VB-01 movement body target으로 전환한다.
+- stale turn completion event가 이후 body를 되돌리지 않는다.
+
+#### Player reverses view direction during turn
+
+- 현재 발이 이미 turn 중이면 즉시 반대 clip으로 snap하지 않는다.
+- 현재 turn을 얼마나 중단할지 / 마무리할지는 asset 결과로 결정하되, visual body와 new target 사이의 delta를 다시 계산한다.
+- stale signed turn request를 재사용하지 않는다.
+
+#### ADS changes during turn
+
+- View 입력과 body semantic target은 계속 유효하다.
+- ADS 전환 때문에 turn animation을 처음부터 restart하지 않는다.
+
+#### Death / possession loss
+
+- turn state 즉시 종료
+- stale turn event / timer 정리
+
+### Foot quality
+
+Turn-in-Place의 성공 여부는 pelvis yaw만으로 판단하지 않는다.
+
+측정:
+
+- left foot world displacement
+- right foot world displacement
+- planted phase에서 slide
+- toe / heel pivot plausibility
+- pelvis pop
+- turn start / stop pose pop
+
+Foot IK / foot lock은 **실제 asset만으로 부족한 것이 확인될 때만** 추가한다.
+
+### Inertialization
+
+turn 진입/종료 pop을 줄이기 위해 우선 검토한다.
+
+단:
+
+- 잘못된 turn target을 숨기는 용도로 사용하지 않는다.
+- 너무 긴 inertialization으로 입력 반응을 흐리지 않는다.
+
+### Network behavior
+
+Turn-in-Place의 기본 network truth는 계속 VisualBodyYaw다.
+
+remote에서 동일한 exact animation frame까지 반드시 맞출 필요는 없다.
+
+관찰자에게 필요한 것은:
+
+- turn direction이 맞음
+- body yaw가 맞음
+- feet가 크게 미끄러지지 않음
+- head/body intention이 모순되지 않음
+
+실제 QA에서 remote turn phase mismatch가 눈에 띄는 문제로 확인될 때만 최소 semantic event를 추가한다.
+
+가능한 최소 event 예:
+
+~~~text
+TurnSequence
+SignedTurnAmount
+~~~
+
+검증 전에는 추가하지 않는다.
+
+### Implementation order
+
+#### VB-02A - Asset inventory / preview
+
+- turn asset 후보 목록
+- root motion 여부
+- in-place 여부
+- skeleton compatibility
+- left/right symmetry
+- actual turn degrees
+- curve availability
+
+을 기록한다.
+
+#### VB-02B - Root-only turn integration
+
+head / spine / weapon solve를 끈 상태에서:
+
+~~~text
+idle body turn target
+→ chosen turn presentation
+→ measured pelvis yaw
+~~~
+
+만 검증한다.
+
+#### VB-02C - Yaw progress synchronization
+
+- double rotation 없음
+- turn curve / canonical yaw source 하나로 통일
+- 45 / 90 / 180 또는 실제 사용 asset 규모 검증
+
+#### VB-02D - Continuous turn chaining
+
+- repeated right turns
+- repeated left turns
+- turn while View continues moving
+- no animation ping-pong
+- no View block
+
+#### VB-02E - Interruptions
+
+- move during turn
+- reverse during turn
+- ADS during turn
+- death during turn
+
+검증.
+
+#### VB-02F - Foot polish
+
+필요한 만큼만:
+
+- blend
+- inertialization
+- foot lock
+- small-turn fallback
+
+을 적용한다.
+
+#### VB-02G - 2-player sanity
+
+observer가:
+
+- correct turn direction
+- correct body yaw
+- no severe pop
+- no stale/replayed turn
+
+을 보는지 확인한다.
+
+### VB-02 acceptance matrix
+
+| Case | Expected |
+|---|---|
+| Small body correction | no oversized 90-deg theatrical turn |
+| 90-deg idle turn | believable feet/pelvis, correct yaw |
+| Large idle turn | appropriate larger turn or chained turn |
+| Continuous right spin | repeated right body turns, no ping-pong |
+| Continuous left spin | mirrored stable behavior |
+| View stops mid-turn | body finishes/settles without View-center chase |
+| View reverses | no instant animation snap; new target respected |
+| Start moving mid-turn | locomotion takes over cleanly |
+| ADS during turn | no restart/pop |
+| Death mid-turn | state cleans immediately |
+| Remote observer | same body intent, no stale turn replay |
+
+### VB-02 completion gate
+
+1. VB-01 body policy를 수정하지 않고 동작한다.
+2. visible body yaw와 turn animation이 double-rotate하지 않는다.
+3. continuous spin이 양방향 모두 자연스럽게 이어진다.
+4. View는 Turn-in-Place 때문에 차단되거나 기다리지 않는다.
+5. gaze residual이 turn 동안 연속적으로 유지된다.
+6. movement interruption이 깨끗하다.
+7. foot slide가 사용자 visual gate 기준에서 허용 범위다.
+8. 2-player observer에서 turn direction/body intent가 일치한다.
+9. 불필요한 network animation state를 추가하지 않는다.
+10. 사용자 visual gate를 통과한다.
+
+### Known acceptable debt after VB-02
+
+VB-02 완료 시에도 다음은 후속 단계다.
+
+- head / neck / spine 최종 high-quality distribution
+- revolver shoulder / arm IK
+- crouch / walk / sprint / jump state foundation
+- final movement locomotion polish
+- Physics Asset weapon hit collision
+- full multiplayer latency QA
+
+이 debt를 VB-01/02에 끌어들여 현재 local scope를 다시 넓히지 않는다.
 
 ### Stop rule
 
 VB-02 검수 전 VB-03로 자동 진행하지 않는다.
-
----
-
-## VB-03 - Look Distribution
-
-### Work
-
-- create / update `CR_LuxUpperBodyPresentation` Look pass
-- source yaw from ViewBodyResidual
-- head-first response
-- neck second
-- progressive upper-spine participation
-- different response timing
-- combined yaw / pitch anatomical envelope
-- remove fixed additive 15/20/25 + 35/65 final chain
-- preserve gaze while body turns underneath
-
-### Gate
-
-- small glance reads clearly as head-led
-- medium side look adds neck / upper torso naturally
-- 90+ deg look remains readable without grotesque twist
-- no 160% over-rotation
-- no roll contamination
-- body turn naturally releases residual
-- no common shared-response robotic motion
-
-### Stop rule
-
-VB-03 검수 전 VB-04로 자동 진행하지 않는다.
-
----
-
-## VB-04 - Revolver Weapon Aim
-
-### Work
-
-- keep current convergence / parallax target math
-- convert target into typed muzzle / hand effector input
-- remove direct hand-only final correction
-- distribute across chest / clavicle / arm
-- wrist handles final residual
-- separate WeaponAimAlpha from Look
-- ADS sustained alpha
-- optional hip-fire pulse
-
-### Gate
-
-- relaxed side look does not drag gun rigidly with head
-- ADS muzzle presentation aligns
-- close target clamp remains stable
-- shoulder / elbow / wrist share correction
-- pelvis / feet never snap because of weapon aim
-- server ballistic result unchanged
-
-### Stop rule
-
-VB-04 검수 전 VB-05로 자동 진행하지 않는다.
-
----
-
-## VB-05 - Movement Presentation Polish
-
-### Work
-
-- inspect current `BS_Lux_Locomotion` local changes
-- verify body-facing-movement UX across forward / side / backward inputs
-- simplify directional blend requirements if body orientation makes them redundant
-- polish turn-to-move / move-to-idle transitions
-- foot stabilization only if measured necessary
-- isolated Orientation Warping experiment only if a concrete artifact remains
-
-### Gate
-
-- travel direction and body presentation do not contradict each other
-- View can remain off-body while moving
-- no body snap on movement start
-- no obvious foot skate
-- no double spine twist
-
-### Stop rule
-
-VB-05 검수 전 VB-06으로 자동 진행하지 않는다.
-
----
-
-## VB-06 - Multiplayer Presentation QA
-
-### Work
-
-- confirm minimal network state
-- 2 / 3 player PIE
-- host + client ownership cases
-- 50ms / 100ms latency
-- JIP
-- repeated continuous spin
-- movement while looking away
-- ADS while moving / turning
-
-### Gate
-
-- owner has immediate response
-- observer reads the same movement / attention intent
-- remote body direction stable
-- remote head look stable
-- no packet-step neck twitch
-- no stale turn event replay
-- no wrap-direction reversal
 
 ---
 
