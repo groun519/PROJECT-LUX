@@ -30,7 +30,7 @@
 
 ### `third-person-view-body-rotation-high-end-plan/`
 
-`third-person-view-body-rotation-review/`의 실패 진단을 전제로 한 implementation-ready 보완 설계. `ULuxViewBodyRotationComponent`를 canonical `VisualBodyYaw` 중심의 view/body semantic policy로 정리하고, idle에서 **고개/목만으로 옆을 보는 quick side glance**, sustained look의 지연 body catch-up, comfortable residual, curve-driven Turn-in-Place를 지원한다. upper-body는 하나의 monolithic FBIK가 아니라 Control Rig의 **Look Distribution pass**와 **Revolver Weapon Aim pass**로 분리하며, head/neck/spine의 서로 다른 응답 시간, anatomical yaw/pitch envelope, Hip Fire aim pulse, minimal network state까지 포함한다. VB-01~VB-07 순서로 root/body contract -> free-look/body follow -> Turn-in-Place -> look solve -> weapon aim -> locomotion -> network를 단계 검증한다.
+`third-person-view-body-rotation-review/`의 실패 진단과 최신 local implementation을 기준으로 재작성한 View / Body / Intent presentation 설계. 목표는 solver 복잡도가 아니라 **관찰자가 플레이어의 이동 방향과 관심 방향을 동시에 읽을 수 있게 하는 것**이다. `Movement Direction`은 visual body / pelvis의 1차 의미를, `View Direction`은 head / neck / upper-spine의 관심 표현을 담당한다. idle sustained look 자체는 더 이상 body follow 원인이 아니며, body는 movement, continuous same-direction turn intent, anatomical limit, ADS/action context 때문에만 회전한다. +-180 wrap에서도 지속 회전 의도를 보존해 한 방향으로 여러 바퀴 돌아도 head가 좌우로 flip하지 않아야 한다. 기존 VB-01/02는 `VB-01 View / Body Intent Foundation`으로 통합했고, 이후 `VB-02 Turn-in-Place -> VB-03 Look Distribution -> VB-04 Revolver Weapon Aim -> VB-05 Movement Presentation Polish -> VB-06 Multiplayer Presentation QA` 순서로 검증한다.
 
 ### `third-person-view-body-rotation-review/`
 
