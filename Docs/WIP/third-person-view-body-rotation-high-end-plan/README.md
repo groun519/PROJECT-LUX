@@ -1978,27 +1978,504 @@ VB-02 검수 전 VB-03로 자동 진행하지 않는다.
 
 ## VB-03 - Look Distribution
 
-### Work
+### Purpose
 
-- create / update `CR_LuxUpperBodyPresentation` Look pass
-- source yaw from ViewBodyResidual
-- head-first response
-- neck second
-- progressive upper-spine participation
-- different response timing
-- combined yaw / pitch anatomical envelope
-- remove fixed additive 15/20/25 + 35/65 final chain
-- preserve gaze while body turns underneath
+VB-03은 **VB-01/02 이후 남아 있는 View-Body 차이를 Head / Neck / Upper Spine가 사람답게 표현하는 단계**다.
 
-### Gate
+이 단계는 body orientation을 다시 결정하지 않는다.
 
-- small glance reads clearly as head-led
-- medium side look adds neck / upper torso naturally
-- 90+ deg look remains readable without grotesque twist
-- no 160% over-rotation
-- no roll contamination
-- body turn naturally releases residual
-- no common shared-response robotic motion
+~~~text
+VB-01
+Where should the body face?
+
+VB-02
+How should the feet / pelvis perform an idle turn?
+
+VB-03
+How should Head / Neck / Upper Spine express the remaining ViewBodyResidual?
+~~~
+
+목표는 '많은 bone을 돌리는 것'이 아니라 **관찰자가 플레이어의 관심 방향을 자연스럽게 읽게 하는 것**이다.
+
+---
+
+### Canonical input
+
+Yaw의 canonical source는 다음이다.
+
+~~~text
+ViewBodyResidualYaw
+= View relative to VisualBody
+~~~
+
+기존처럼:
+
+~~~text
+BaseAimRotation - ActorRotation
+~~~
+
+을 최종 Look yaw truth로 사용하지 않는다.
+
+Pitch는 presentation view pitch를 기준으로 별도 처리하되 yaw와 함께 anatomical envelope를 만족해야 한다.
+
+---
+
+### Core rule - Residual Budget
+
+각 bone에 같은 Look delta를 비율로 복사하지 않는다.
+
+현재 local implementation의:
+
+~~~text
+Spine01 = 15%
+Spine02 = 20%
+Spine03 = 25%
+Neck     = 35%
+Head     = 65%
+~~~
+
+같은 additive chain은 parent-child 누적으로 최종 시선이 원래 residual보다 과도하게 회전할 수 있다.
+
+VB-03에서는 하나의 **Residual Budget**을 사용한다.
+
+예:
+
+~~~text
+ViewBodyResidual = 80 deg
+
+Head / Neck / Upper Spine
+→ together express that 80 deg
+→ total visible gaze should not overshoot the intended residual
+~~~
+
+구현 방식은 고정하지 않는다.
+
+Control Rig, constrained chain solve, residual consumption, target-based solve 등 더 나은 방법을 선택할 수 있다.
+
+단 결과 계약은 다음이다.
+
+1. 전체 chain의 최종 gaze는 View target을 향한다.
+2. 각 joint contribution이 서로 중복되어 over-rotation하지 않는다.
+3. body가 회전해 residual이 줄면 upper-body contribution도 연속적으로 줄어든다.
+
+---
+
+### Participation priority - Not exclusive stages
+
+Head -> Neck -> Spine는 **반응 우선순위**이지 배타적인 단계가 아니다.
+
+잘못된 해석:
+
+~~~text
+0-30 deg
+→ Head only
+
+30-60 deg
+→ Neck only
+
+60+ deg
+→ Spine only
+~~~
+
+원하는 의미:
+
+~~~text
+Small residual
+Head       dominant
+Neck       naturally participates
+UpperSpine minimal
+
+Medium residual
+Head       still leads
+Neck       participates strongly
+UpperSpine starts supporting
+
+Large residual
+Head       stays on gaze target
+Neck       near strong participation
+UpperSpine clearly joins
+~~~
+
+즉 한 관절이 끝까지 버틴 뒤 다음 관절이 갑자기 켜지는 방식이 아니다.
+
+---
+
+### Response timing
+
+현재 local implementation처럼 하나의 SmoothedLookRotation을 모든 upper-body segment가 공유하지 않는다.
+
+최종 체감 목표:
+
+~~~text
+View moves immediately
+      ↓
+Head reacts fastest
+      ↓
+Neck follows shortly after
+      ↓
+Upper Spine follows more slowly
+      ↓
+Visual Body changes only through VB-01/02
+~~~
+
+정확한 spring / interpolation 방식과 parameter는 구현자가 더 적합한 방법을 선택할 수 있다.
+
+중요한 것은:
+
+- head가 가장 빠르다.
+- neck가 약간 늦다.
+- upper spine가 더 느리다.
+- overshoot / oscillation이 눈에 띄지 않는다.
+- 빠른 glance가 짧은 head-led gesture로 읽힌다.
+
+---
+
+### Angle behavior
+
+정확한 수치는 skeleton preview에서 조정하되 초기 UX target은 다음 정도다.
+
+~~~text
+Small        about 0 - 30 deg
+Medium       about 30 - 60 deg
+Large        about 60 - 90 deg
+Extreme      about 90 - 110 deg
+~~~
+
+#### Small
+
+- pelvis unchanged
+- upper spine contribution very small
+- head / neck 중심
+- quick glance가 명확히 읽힘
+
+#### Medium
+
+- neck contribution 증가
+- upper spine가 자연스럽게 참여 시작
+- 여전히 head가 관심 방향을 명확히 표현
+
+#### Large
+
+- upper torso twist가 명확히 보임
+- head / neck가 gaze를 유지
+- observer가 '몸은 이쪽, 시선은 저쪽'을 쉽게 읽을 수 있어야 함
+
+#### Extreme
+
+- over-shoulder look처럼 보여도 기괴하지 않아야 함
+- VB-01 anatomical correction과 자연스럽게 연결
+- hard clamp 직전 pose가 갑자기 멈추거나 꺾이지 않음
+
+---
+
+### Gaze preservation during body turn
+
+VB-02가 body를 회전시키는 동안 Head / Neck를 center로 reset하지 않는다.
+
+~~~text
+View stays at world target
+
+VisualBody
+0 -> 30 -> 60
+
+ViewBodyResidual
+90 -> 60 -> 30
+
+Head / Neck / UpperSpine
+→ naturally unwind while staying on the same gaze target
+~~~
+
+즉 body turn이 시작되면 Look solve가 새 residual을 계속 소비한다.
+
+이 과정에서:
+
+- head snap 금지
+- residual sign flip 금지
+- body turn 직후 one-frame gaze pop 금지
+
+---
+
+### Yaw + Pitch anatomical envelope
+
+Yaw와 Pitch를 각각 독립 max clamp만 하는 것으로 끝내지 않는다.
+
+예:
+
+~~~text
+large yaw
++
+large up/down pitch
+~~~
+
+가 동시에 최대치가 되어 목이 기괴하게 꺾이지 않도록 combined anatomical envelope를 둔다.
+
+개념적으로는 다음과 같은 제한이 가능하다.
+
+~~~text
+(yaw / MaxYaw)^2 + (pitch / MaxPitch)^2 <= 1
+~~~
+
+정확한 식과 비대칭 up/down limit은 구현자가 skeleton 결과를 보고 조정할 수 있다.
+
+결과 기준:
+
+- neck twist 없음
+- roll contamination 없음
+- extreme diagonal look가 plausible함
+
+---
+
+### Coordinate-space contract
+
+Mesh의 -90 degree relative yaw 같은 correction을 여러 함수 / graph에서 각각 적용하지 않는다.
+
+Look target은 한 번 명확한 space로 변환한 뒤 일관된 기준으로 solve한다.
+
+허용되는 최종 선택:
+
+- Component Space
+- Rig Global
+- 다른 명시적 single-space contract
+
+중요한 것은 **중복 보정이 없어야 한다는 것**이다.
+
+---
+
+### Interaction with VB-04 Weapon Aim
+
+VB-03와 VB-04는 서로 다른 목적을 가진다.
+
+~~~text
+VB-03
+Look / Attention
+
+VB-04
+Weapon / Muzzle Alignment
+~~~
+
+문제:
+
+VB-04가 Chest / Clavicle / Arm을 움직이면 그 자식인 Neck / Head의 최종 gaze가 다시 틀어질 수 있다.
+
+따라서 최종 presentation graph는 **Weapon solve 이후에도 gaze가 유지되는 구조**여야 한다.
+
+가능한 방향 중 하나:
+
+~~~text
+ViewBodyResidual
+        ↓
+Upper Torso Look contribution
+        ↓
+Weapon Chest / Shoulder / Arm solve
+        ↓
+Final Neck / Head gaze correction
+        ↓
+View target preserved
+~~~
+
+정확한 node order는 구현자가 더 좋은 결과를 내는 방향으로 조정할 수 있다.
+
+고정할 결과 계약:
+
+1. Weapon Aim이 chest를 움직여도 최종 head gaze는 View를 유지한다.
+2. relaxed 상태에서는 weapon이 head gaze를 끌고 가지 않는다.
+3. ADS에서는 torso와 weapon participation이 커져도 head가 sight / View와 모순되지 않는다.
+4. Look과 Weapon이 같은 spine 자유도를 무제한으로 두고 경쟁하지 않는다.
+
+---
+
+### Relaxed / ADS behavior
+
+#### Relaxed
+
+- Head / Neck participation high
+- Upper Spine progressive
+- Weapon Aim influence low / zero
+- side glance가 사회적 gesture로 잘 읽혀야 함
+
+#### ADS
+
+- Head가 View / sight line에 가깝게 유지
+- torso participation은 더 적극적일 수 있음
+- Weapon solve 이후 final gaze correction 유지
+- rigid mannequin pose가 되지 않도록 작은 natural residual 허용 가능
+
+정확한 비율은 고정하지 않는다.
+
+---
+
+### Fast reversal
+
+빠르게 오른쪽을 보다가 왼쪽으로 바꾸는 경우:
+
+~~~text
+Head reacts first
+Neck follows
+Spine brakes / follows
+~~~
+
+가 되어야 한다.
+
+금지:
+
+- 모든 bone이 같은 frame에 동일 속도로 방향 반전
+- spring overshoot로 head가 target을 왕복
+- previous-direction residual이 오래 남아 twist 발생
+
+---
+
+### Moving look
+
+이동 중에도 Look solve는 유지된다.
+
+~~~text
+Body
+→ Movement Direction
+
+View
+→ another direction
+
+VB-03
+→ express ViewBodyResidual on upper body
+~~~
+
+moving이라는 이유만으로 Head lead를 0으로 만들지 않는다.
+
+다만 실제 locomotion pose와 충돌이 심하면 upper-spine 허용량을 줄이는 것은 가능하다.
+
+이 조정은 결과 기반 tuning으로 둔다.
+
+---
+
+### Implementation freedom
+
+다음은 요구가 아니라 후보다.
+
+- Control Rig
+- constrained chain distribution
+- per-layer critically damped spring
+- residual-consuming sequential solve
+- target-based head/neck aim
+- small spine support pass
+
+더 단순한 방법으로 동일 결과를 낼 수 있으면 허용한다.
+
+반대로 solver를 복잡하게 만드는 것 자체는 성공 조건이 아니다.
+
+---
+
+### Debug measurements
+
+최소 다음을 볼 수 있어야 한다.
+
+~~~text
+ViewBodyResidualYaw
+PresentationViewPitch
+Head contribution
+Neck contribution
+UpperSpine contribution
+Final Head Forward vs View Forward error
+Final Chest Forward
+Current VisualBodyYaw
+~~~
+
+가능하면 실제 world-space bone forward와 ViewForward를 함께 비교한다.
+
+---
+
+### Implementation order
+
+#### VB-03A - Baseline / current additive measurement
+
+현재 local fixed additive chain에서:
+
+- 30
+- 60
+- 90
+
+degree residual을 주고 실제 Head world forward가 View target을 얼마나 overshoot하는지 측정한다.
+
+#### VB-03B - Canonical residual input
+
+- Look yaw source를 ViewBodyResidual 기반으로 정리
+- Actor-relative look dependency 제거
+- Pitch source와 coordinate-space contract 확정
+
+#### VB-03C - Residual distribution
+
+- fixed additive percentage chain 제거
+- residual budget 기반 distribution 적용
+- small / medium / large participation 검증
+
+#### VB-03D - Response timing
+
+- Head fastest
+- Neck next
+- Upper Spine slower
+
+의 시간차를 적용한다.
+
+#### VB-03E - Anatomical envelope
+
+- extreme yaw
+- extreme pitch
+- diagonal yaw + pitch
+
+를 검증하고 combined limit 적용.
+
+#### VB-03F - Body-turn gaze preservation
+
+VB-02 turn 중 residual이 줄어드는 동안 gaze가 유지되는지 검증한다.
+
+#### VB-03G - Weapon-order compatibility spike
+
+실제 VB-04를 구현하지는 않는다.
+
+다만 chest / clavicle에 임시 correction을 넣었을 때 final head gaze를 유지할 수 있는 graph order인지 확인한다.
+
+필요하면 최종 Neck / Head correction 위치를 확정한다.
+
+---
+
+### Acceptance matrix
+
+| Case | Expected |
+|---|---|
+| Idle 20-30 deg glance | head/neck dominant, spine minimal |
+| Idle 45-60 deg look | neck strong, upper spine joins smoothly |
+| Idle 80-90 deg look | clear upper torso participation, gaze stable |
+| 100-110 deg extreme | plausible over-shoulder pose, no grotesque twist |
+| Hold look | no jitter / no progressive additive drift |
+| Body turns underneath | gaze preserved, residual unwinds naturally |
+| Fast right -> left | head leads reversal, chain does not snap together |
+| Look up/down | plausible asymmetric pitch if needed |
+| Large yaw + pitch | anatomical envelope prevents impossible pose |
+| Move while looking elsewhere | body movement intent + gaze intent both readable |
+| Temporary chest correction | final head gaze still reaches View target |
+
+---
+
+### Completion gate
+
+VB-03은 아래가 모두 만족될 때 완료다.
+
+1. Look yaw가 canonical ViewBodyResidual을 사용한다.
+2. fixed additive chain의 over-rotation 문제가 제거된다.
+3. Head / Neck / Upper Spine가 residual 하나를 협력해서 표현한다.
+4. Head -> Neck -> Spine response timing 차이가 시각적으로 읽힌다.
+5. small glance가 head-led gesture로 보인다.
+6. large / extreme look가 해부학적으로 납득 가능하다.
+7. body turn 중 gaze가 끊기지 않는다.
+8. yaw + pitch에서 neck twist / roll contamination이 없다.
+9. temporary weapon/chest correction 이후에도 final gaze를 보존할 구조가 증명된다.
+10. 사용자 visual gate를 통과한다.
+
+### Known acceptable debt after VB-03
+
+- final revolver shoulder / arm solve
+- muzzle convergence tuning
+- locomotion-state expansion
+- final multiplayer latency QA
 
 ### Stop rule
 
