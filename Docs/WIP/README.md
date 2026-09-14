@@ -30,7 +30,7 @@
 
 ### `third-person-view-body-rotation-high-end-plan/`
 
-`third-person-view-body-rotation-review/`의 실패 진단과 최신 local implementation을 기준으로 재작성한 View / Body / Intent presentation 설계. 목표는 solver 복잡도가 아니라 **관찰자가 플레이어의 이동 방향과 관심 방향을 동시에 읽을 수 있게 하는 것**이다. `Movement Direction`은 visual body / pelvis의 1차 의미를, `View Direction`은 head / neck / upper-spine의 관심 표현을 담당한다. idle sustained look 자체는 더 이상 body follow 원인이 아니며, body는 movement, continuous same-direction turn intent, anatomical limit, ADS/action context 때문에만 회전한다. +-180 wrap에서도 지속 회전 의도를 보존해 한 방향으로 여러 바퀴 돌아도 head가 좌우로 flip하지 않아야 한다. 기존 VB-01/02는 `VB-01 View / Body Intent Foundation`으로 통합했고, 이후 `VB-02 Turn-in-Place -> VB-03 Look Distribution -> VB-04 Revolver Weapon Aim -> VB-05 Movement Presentation Polish -> VB-06 Multiplayer Presentation QA` 순서로 검증한다.
+`third-person-view-body-rotation-review/`의 실패 진단과 최신 local implementation을 기준으로 재작성한 View / Body / Intent presentation 설계. 목표는 solver 복잡도가 아니라 **관찰자가 플레이어의 이동, 관심, weapon intent를 서로 모순 없이 읽을 수 있게 하는 것**이다. `MovementDirectionYaw`는 travel truth이며 `VisualBodyYaw`와 자동으로 동일시하지 않는다. locomotion은 Travel relative to VisualBody로 forward / side / backward를 표현하고, idle sustained look 자체는 body follow 원인이 아니다. 최신 local은 Look / Weapon / locomotion 실험까지 누적되어 있어 `VB-01-Fix Consolidation / Refactor`로 구조를 먼저 정리한 뒤 `VB-02 Turn-in-Place -> VB-03 Look Distribution -> VB-04 Revolver Weapon Presentation -> VB-05 Movement Presentation Polish -> VB-06 Multiplayer Presentation QA -> VB-07 Weapon Obstruction` 순서로 검증한다. VB-07 이후 EOS migration/configuration, Physics Asset weapon hit + death ragdoll finalization을 거쳐 실제 01-G 6-player QA로 간다.
 
 ### `third-person-view-body-rotation-review/`
 
