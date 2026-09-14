@@ -1,10 +1,10 @@
 # Third-Person View / Body / Intent Presentation Plan
 
-> Status: **VB-01 policy rework required on top of the current local implementation**  
+> Status: **Current local consolidation required before VB-02**  
 > Stable baseline: `main@0275e299b9400488e7770f322f285f3b1e82792c`  
-> Local implementation basis: `LocalChangesReview_42591216.md`  
+> Local implementation basis: `LocalChangesReview_69069282.md`  
 > Companion diagnosis: `../third-person-view-body-rotation-review/README.md`  
-> Scope: view/body separation, movement-facing body intent, expressive head/upper-body look, continuous turning, Turn-in-Place, revolver aim presentation, locomotion polish, remote presentation  
+> Scope: view/body separation, movement/body intent, expressive head/upper-body look, Turn-in-Place, revolver presentation, locomotion polish, multiplayer presentation, Weapon Obstruction before EOS  
 > Product goal: **다른 플레이어가 캐릭터를 봤을 때 그 플레이어가 어디로 가고 무엇을 보고 있으며 무엇을 하려는지가 몸짓으로 읽히게 한다.**
 
 ---
@@ -30,11 +30,11 @@ Body turns only when there is a reason for the body itself to turn.
 4. 연속 회전이나 이동 같은 기본 조작에서 시스템이 방해물이 되지 않는가?
 5. 그 뒤에 animation / IK 품질을 높인다.
 
-현재 local diff에는 이미 `ULuxViewBodyRotationComponent`, canonical `VisualBodyYaw`, AnimInstance의 `RootYawOffset` 파생, 최소 replication의 기초가 들어가 있다.
+현재 local diff는 초기 VB-01 foundation을 넘어 Look / locomotion / weapon aim 실험까지 함께 누적된 상태다.
 
-따라서 기존 VB-01 / VB-02를 따로 구현하지 않는다.
+따라서 현재 결과를 유지한 채 먼저 구조를 솎아내는 `VB-01-Fix`를 둔다.
 
-**기존 VB-01과 VB-02를 하나의 새 VB-01로 통합한다.**
+`VB-01-Fix`는 새 기능 checkpoint가 아니라 **현재 local을 안정된 기반으로 정리하는 consolidation / refactor pass**다. 이후 번호는 기존대로 유지한다.
 
 ---
 
@@ -148,24 +148,57 @@ view keeps rotating right
 
 **View leads. Body follows when the player is actually turning. Body never blocks View.**
 
-## Requirement - Body follows movement
+## Requirement - Movement is travel truth, not automatic body-facing truth
 
-이동 중 body orientation의 1차 기준은 View가 아니라 **Movement Direction**이다.
+`MovementDirectionYaw`는 **실제로 어디로 이동하고 있는가**에 대한 truth다.
 
-```text
-Start moving
-→ desired visual body direction comes from horizontal movement
-→ pelvis / legs / body align toward travel direction
-→ View-Body difference remains available to head / upper body
-```
+하지만 다음 등식은 사용하지 않는다.
 
-정지하면 body는 마지막 유효 orientation을 유지한다.
+~~~text
+MovementDirectionYaw
+=
+VisualBodyYaw
+~~~
 
-이 요구는 기존 목업의 'moving에서도 view를 더 적극적으로 follow한다' 규칙을 대체한다.
+이동은 body orientation에 영향을 줄 수 있지만 body를 무조건 travel direction으로 덮어쓰지 않는다.
 
-이전의 cardinal strafe / backward pose 보존은 더 이상 상위 요구사항이 아니다.
+핵심 이유는 다음 두 행동의 의도가 다르기 때문이다.
 
-현재 Blend Space를 당장 삭제하지는 않지만, 최종 이동 표현은 **실제 이동 방향을 몸이 표현한다**는 UX를 우선한다.
+~~~text
+Case A
+continue travelling
++ turn View back toward where the player came from
+
+Case B
+keep facing forward
++ intentionally backpedal
+~~~
+
+둘을 단순히 현재 Movement Direction 하나만 보고 같은 body target으로 만들면 observer가 두 행동을 구분할 수 없다.
+
+따라서:
+
+- `MovementDirectionYaw`는 horizontal velocity 기반 travel truth로 유지한다.
+- locomotion `Direction`은 `VisualBodyYaw` 기준으로 계산한다.
+- forward / side / backward animation 의미는 **Travel relative to Visual Body**에서 나온다.
+- movement가 body를 회전시키는 정확한 정책은 현재 body continuity / View / movement relation을 함께 본다.
+- 현재 local의 longitudinal movement alignment는 후보 구현이며, 위 두 case를 실제로 구분하지 못하면 VB-01-Fix에서 축소 또는 교체한다.
+- 정지하면 body는 마지막 유효 orientation을 유지한다.
+
+목표는:
+
+~~~text
+Travel Direction
+!= automatically Body Facing
+
+Travel relative to VisualBody
+→ locomotion direction
+
+View relative to VisualBody
+→ attention residual
+~~~
+
+이다.
 
 ## Requirement - Anatomical limit is a safety boundary, not the main behavior
 
@@ -348,19 +381,33 @@ ContinuousViewYaw += SignedFrameViewDelta
 
 Visual Body가 회전하는 이유를 명시적으로 제한한다.
 
-## Cause A - Movement
+## Cause A - Movement context
 
-가장 일반적인 body orientation source.
+Movement는 body rotation의 중요한 문맥이지만 곧바로 body yaw 그 자체는 아니다.
 
-```text
+~~~text
 horizontal speed above threshold
-→ derive MovementDirectionYaw from velocity / resolved movement
-→ DesiredVisualBodyYaw follows movement direction
-```
+→ derive MovementDirectionYaw from actual travel
+→ compare Travel / View / current VisualBody
+→ decide whether movement should rotate body, preserve body, or remain directional locomotion
+~~~
 
-몸은 순간 snap하지 않고 짧은 response를 가질 수 있다.
+고정 계약:
 
-하지만 발과 이동 방향이 장시간 모순되면 안 된다.
+- movement direction은 velocity truth다.
+- body-facing truth는 별도다.
+- backward / side locomotion이 필요하면 VisualBody를 유지할 수 있다.
+- movement 시작만으로 180 degree body flip을 만들지 않는다.
+- body가 실제로 회전해야 할 때만 안정된 angular response로 target을 바꾼다.
+
+특히 다음 두 case가 같은 결과로 붕괴하지 않아야 한다.
+
+~~~text
+travel forward then look back
+face forward then backpedal
+~~~
+
+정확한 heuristic은 VB-01-Fix regression에서 current local 결과를 보고 최소 규칙으로 확정한다.
 
 ## Cause B - Continuous turn intent
 
@@ -412,145 +459,154 @@ player has looked 60 degrees to the right for N seconds
 
 # 4. Current local implementation findings
 
-기준: `LocalChangesReview_42591216.md`
+기준: `LocalChangesReview_69069282.md`
 
-## Fact L-01 - Structural VB-01 foundation already exists
+## Fact L-01 - Structural foundation is now implemented
 
-현재 local diff에는 다음이 존재한다.
+현재 local에는 다음이 실제로 존재한다.
 
-```text
+~~~text
 ULuxViewBodyRotationComponent
 canonical VisualBodyYaw
-component-owned Tick
+continuous signed view accumulation
+movement / anatomy / continuous-turn body policy
 VisualBodyYaw replication with COND_SkipOwner
 AnimInstance-derived RootYawOffset
-equipped-revolver check for upper-body weight
-```
+ViewBodyResidualYaw
+~~~
 
-따라서 새 VB-01은 이 구조를 버리지 않는다.
+이 foundation은 유지한다.
 
-기존 구현 위에서 body policy를 교체한다.
+## Fact L-02 - Locomotion Direction now uses VisualBodyYaw
 
-## Finding L-02 - Current body policy is still View-follow policy
+현재 `ULuxCharacterAnimInstance`는 horizontal velocity를 ActorYaw가 아니라 `VisualBodyYaw` 기준으로 local transform하여 `Direction`을 계산한다.
 
-현재 component는 `ActorYaw`를 canonical input처럼 사용하고 VisualBodyYaw가 ActorYaw를 늦게 따라간다.
+따라서 forward / side / backward pose는:
 
-현재 Character 설정:
+~~~text
+Travel Direction relative to Visual Body
+~~~
 
-```text
-bUseControllerRotationYaw = true
-```
+라는 의미를 가질 수 있다.
 
-즉 ActorYaw는 사실상 view/controller yaw와 강하게 연결된다.
+이 방향은 유지한다.
 
-현재 policy의 의미는:
+## Finding L-03 - Movement/body policy still needs one semantic regression
 
-```text
-View leads
-VisualBody follows View with relaxed / aiming / moving thresholds
-```
+현재 local은 movement가 View 기준 longitudinal 영역이면 body를 View 쪽으로 align하고, side movement는 directional locomotion으로 남기는 정책을 사용한다.
 
-이다.
+이 방식은 기존의 `body = movement` 강제보다 낫지만 다음 두 행동이 observer에게 실제로 다르게 읽히는지는 아직 visual gate가 필요하다.
 
-새 요구는:
+~~~text
+continue travelling then look back
+keep facing forward and backpedal
+~~~
 
-```text
-Movement owns body while moving
-View owns attention
-Continuous turn / anatomical limit can rotate body while idle
-```
+둘이 같은 pose/intent로 붕괴하면 movement rule을 더 추가하는 것이 아니라 **body continuity를 보존하는 쪽으로 정책을 단순화**한다.
 
-이므로 policy 수정이 필요하다.
+## Fact L-04 - Head response and Look separation improved
 
-## Finding L-03 - Current moving policy still follows Actor/View
+현재 local은:
 
-현재 moving에서는 `bFollowingView = true`에 가깝게 동작하며 `MovingFullFollowAngle`, `MovingMaximumFollowSpeed`로 ActorYaw를 추종한다.
+~~~text
+SmoothedHeadLookRotation
+SmoothedTorsoLookRotation
+TorsoLookShare
+ViewBodyResidualYaw
+~~~
 
-이 규칙은 새 UX와 맞지 않는다.
+를 사용한다.
 
-Moving state는 View follow gain이 아니라 **MovementDirectionYaw를 body target으로 선택하는 문맥**이 되어야 한다.
+Head와 Torso가 서로 다른 response speed를 가지며, 사용자 visual test에서 기존 고개 문제와 반응 속도는 현재 만족스러운 상태다.
 
-## Finding L-04 - Current head/spine yaw source does not express VisualBody separation directly
+VB-01-Fix는 이 결과를 regression baseline으로 취급하고 불필요하게 다시 흔들지 않는다.
 
-현재 AnimInstance의 look delta:
+## Finding L-05 - AnimInstance has accumulated too many responsibilities
 
-```text
-GetBaseAimRotation() - GetActorRotation()
-```
+현재 `ULuxCharacterAnimInstance`는 한 파일에서 최소 다음을 수행한다.
 
-새 구조에서는 yaw가:
+~~~text
+locomotion direction
+RootYawOffset
+Look distribution
+torso participation
+weapon target trace
+close-target handling
+parallax clamp
+clavicle contribution
+arm IK targets
+iterative muzzle solve
+debug measurements
+~~~
 
-```text
-PresentationViewYaw - VisualBodyYaw
-```
+기능은 동작하지만 책임과 계산이 한 곳에 과도하게 누적되었다.
 
-를 반영해야 한다.
+VB-01-Fix의 핵심은 **새 abstraction을 늘리는 것이 아니라 이 로직을 솎아내고 책임을 다시 명확히 하는 것**이다.
 
-그렇지 않으면 RootYawOffset으로 body를 분리해도 head / spine가 실제 View-Body 차이를 제대로 표현하지 못할 수 있다.
+## Finding L-06 - Weapon aim solve is more capable but over-complexity must be justified
 
-## Finding L-05 - Fixed additive look distribution can exceed the intended rotation
+현재 weapon solve는 shoulder / elbow / hand / predicted muzzle 위치를 사용하고 최대 12회 반복하여 convergence를 계산한다.
 
-현재:
+이 결과가 실제로 필요한 품질을 주는지는 유지하되:
 
-```text
-Spine01 = 15%
-Spine02 = 20%
-Spine03 = 25%
-Neck + Head = up to 100% outside ADS
-```
+- 동일한 시각 결과를 더 적은 iteration으로 얻을 수 있는지 측정
+- previous-frame feedback가 없는 현재 안정성 유지
+- weapon-specific world target / convergence responsibility는 TP Presentation 쪽으로 이동 가능한지 검토
 
-parent-child additive 누적 시 목표보다 큰 총 회전이 발생할 수 있다.
+한다.
 
-이 구현은 VB-03에서 교체한다.
+단순히 줄 수를 줄이는 것이 목적은 아니다. **같은 결과를 더 적은 상태와 계산으로 낼 수 있을 때만 줄인다.**
 
-## Finding L-06 - All upper-body segments share one response time
+## Finding L-07 - Relaxed Head Look is still coupled to the weapon through the right clavicle
 
-현재 `SmoothedLookRotation` 하나를 모든 spine / neck / head가 공유한다.
+현재 local은 non-ADS에서도:
 
-따라서 최종 각도 비율만 다르고:
+~~~text
+HeadLookQuaternion
+→ RightClavicleAimRotation
+→ right arm / weapon pose
+~~~
 
-```text
-Head first
-Neck second
-Spine later
-```
+경로가 남아 있고 `RelaxedRightClavicleAimShare` 기본값도 0이 아니다.
 
-라는 의도 표현이 나오지 않는다.
+이 때문에 플레이어 View와 무관하게 보이는 weapon drift가 생겨, 관찰자에게 총구가 의도하지 않은 대상을 향하는 것처럼 읽힐 수 있다.
 
-## Finding L-07 - Current normalized yaw policy does not preserve continuous turn intent as an explicit state
+채택 규칙:
 
-현재 body policy는 normalized ActorYaw / VisualBodyYaw와 shortest delta를 사용한다.
+~~~text
+Relaxed / Non-ADS
+Head / Neck / Spine express View
+Weapon remains body-relative ready pose
+Head Look does not drive weapon/clavicle aim
 
-일반 orientation comparison에는 유효하지만:
+ADS
+Weapon aim follows the presentation aim target
+Clavicle / arm / wrist may participate
+~~~
 
-```text
-I am still turning right
-```
+주변 player를 탐지해 총구가 사람을 피하게 만드는 별도 safe-envelope 시스템은 만들지 않는다.
 
-라는 player intent를 별도로 보존하지 않는다.
+VB-01-Fix에서는 현재 relaxed clavicle coupling이 정말 필요한지 제거 테스트하고, 필요성이 증명되지 않으면 제거한다.
 
-새 VB-01에는 wrap-safe continuous view delta / turn intent가 필요하다.
+## Finding L-08 - TP action presentation still has two explicit checks
 
-## Finding L-08 - Current right-hand aim has useful target math but final solve is too hand-centric
+VB-04에서 다음을 별도로 검증한다.
 
-유지할 것:
+1. TP Reload에서 손 / 총 / 실린더 동작이 어긋나는 현상
+2. TP Fire retarget에서 trigger-finger motion이 실제로 보존되는지
 
-- camera trace
-- minimum convergence distance
-- parallax clamp
-- desired muzzle rotation
-- HandToMuzzle inverse target generation
-- muzzle aim error debug
+Fire finger는 새 기능이라고 가정하지 않는다.
 
-교체할 것:
+~~~text
+A_Lux_TP_Revolver_FireAim
+A_Lux_TP_Revolver_FireHip
+~~~
 
-- hand bone 하나가 전체 correction을 해결하는 최종 방식
+원본 / retarget / AnimGraph 순서로 확인하고, 이미 존재하면 그대로 유지한다. Retarget 또는 graph에서 유실된 경우에만 교정한다.
 
-## Finding L-09 - Root axis diagnostics are still local implementation evidence
+## Finding L-09 - Diagnostics / editor files remain separable debt
 
-현재 local bundle에는 Root Axis diagnostic assets가 있다.
-
-VB-01 완료는 계산값만이 아니라 실제 pelvis / body world orientation을 확인한 뒤 판정한다.
+현재 local의 Root Axis diagnostic assets는 root/body truth 검증이 끝났다면 제거 후보다.
 
 `Config/DefaultEditor.ini`는 기능 범위가 아니므로 stage / commit하지 않는다.
 
@@ -630,6 +686,20 @@ How should the weapon converge on its presentation target?
 
 세 책임을 섞지 않는다.
 
+추가 weapon contract:
+
+~~~text
+Relaxed / Non-ADS
+Look may move independently.
+Weapon stays body-relative.
+Head Look must not directly steer the revolver.
+
+ADS
+Weapon presentation converges toward View / aim target.
+~~~
+
+총구 방향의 의미를 주변 player 위치를 검사해서 인위적으로 회피시키지 않는다.
+
 ---
 
 # 6. ULuxViewBodyRotationComponent target responsibility
@@ -708,18 +778,28 @@ SameDirectionTurnTime
 
 wrap crossing에서 sign이 바뀌지 않아야 한다.
 
-## Step 3 - Resolve movement body target
+## Step 3 - Resolve movement context
 
 horizontal movement가 유효하면:
 
-```text
+~~~text
 MovementDirectionYaw = atan2(Velocity.Y, Velocity.X)
-DesiredVisualBodyYaw = MovementDirectionYaw
-```
+LocomotionDirection = Delta(VisualBodyYaw, MovementDirectionYaw)
+~~~
 
-를 기본 target으로 사용한다.
+를 계산한다.
 
-movement 시작 직후 한 프레임 snap을 만들지 않고 안정된 angular response로 접근한다.
+여기서 `MovementDirectionYaw`를 바로 `DesiredVisualBodyYaw`로 복사하지 않는다.
+
+현재 body orientation, View relation, locomotion direction을 보고 movement가 실제 body turn을 요구하는지 결정한다.
+
+최소 결과 계약:
+
+- forward / backward / side locomotion이 VisualBody 기준으로 구분된다.
+- travel direction 변경만으로 body가 불필요하게 180 degree flip하지 않는다.
+- body continuity가 유지된다.
+- `travel forward then look back`과 `face forward then backpedal`이 동일한 의도로 붕괴하지 않는다.
+- current local longitudinal alignment가 이 계약을 만족하면 유지하고, 아니면 더 단순한 continuity-first rule로 축소한다.
 
 ## Step 4 - Idle keeps its body
 
@@ -1096,42 +1176,84 @@ Output Pose
 
 ## Scope freeze
 
-현재 local working tree는 이미 기존 VB-01/02 실험 위에 많은 변경이 쌓여 있다.
+현재 local working tree는 VB-01을 구현하는 과정에서 Look / Weapon / Locomotion 실험까지 일부 앞당겨 누적되었다.
 
-따라서 현재 단계에서는 checkpoint 순서를 다시 삽입하거나 renumber하지 않는다.
+따라서 새 기능을 더 얹기 전에 **VB-01-Fix**를 둔다.
 
 고정 순서:
 
 ~~~text
-VB-01  View / Body Intent Foundation
-VB-02  Turn-in-Place
-VB-03  Look Distribution
-VB-04  Revolver Weapon Aim
-VB-05  Movement Presentation Polish
-VB-06  Multiplayer Presentation QA
+VB-01      View / Body Intent Foundation
+VB-01-Fix  Consolidation / Refactor
+VB-02      Turn-in-Place
+VB-03      Look Distribution
+VB-04      Revolver Weapon Presentation
+VB-05      Movement Presentation Polish
+VB-06      Multiplayer Presentation QA
+VB-07      Weapon Obstruction
 ~~~
 
-현재 집중 범위는 **VB-01과 VB-02뿐**이다.
+`VB-01-Fix`는 새 번호를 소비하지 않는 correction pass다. 이후 기존 VB-02~VB-06 번호는 유지하고, 실제 새 기능인 Weapon Obstruction을 VB-07로 추가한다.
 
-다음 항목은 필요성이 확정되어 있지만 지금 checkpoint에 끼워 넣지 않는다.
+현재 우선순위:
 
 ~~~text
-Future locomotion state work
-- Crouch
-- Walk
-- Jog
-- Sprint
-- Jump / Fall / Land
-
-Future combat collision work
-- capsule-only weapon hit 제거
-- Skeletal Mesh / Physics Asset 기반 weapon trace
-- dedicated weapon trace channel
+VB-01 result freeze
+→ VB-01-Fix cleanup
+→ remaining VB checkpoints
+→ VB-07 Weapon Obstruction
+→ EOS migration / configuration
+→ Combat / Death Finalization
+→ 01-G real six-player QA
 ~~~
 
-이 항목들은 VB-01/02를 끝낸 뒤 별도 계획으로 배치한다.
+### Deferred locomotion-state expansion
 
-단, VB-01/02가 미래 locomotion state 추가를 막는 hard-coded 구조를 만들면 안 된다.
+현재 VB checkpoint에 끼워 넣지 않는다.
+
+~~~text
+Crouch
+Walk
+Jog
+Sprint
+Jump / Fall / Land
+~~~
+
+현재 구조가 이 future state를 막는 hard-coded architecture만 만들지 않는다.
+
+### Post-VB online / combat order
+
+VB-06은 2~3 player PIE / local replication sanity까지 담당한다.
+
+VB-07까지 끝난 뒤 실제 online backend를 EOS로 전환 / 구성한다.
+
+~~~text
+EOS migration / configuration
+- preserve existing session abstraction where possible
+- EOS / EOSPlus configuration
+- Create / Find / Join / Destroy regression
+- Listen Server remote connectivity
+~~~
+
+그 다음 실제 01-G 전에 Combat / Death Finalization을 수행한다.
+
+~~~text
+Physics Asset based weapon hit
+capsule-only weapon hit 제거
+dedicated weapon trace policy
+death ragdoll
+death-time animation / IK / weapon presentation cleanup
+~~~
+
+최종:
+
+~~~text
+01-G
+Host + 5 Clients
+real six-player integrated QA
+~~~
+
+실제 6인 QA를 임시 backend와 EOS에서 두 번 반복하지 않는다.
 
 ---
 
@@ -1212,7 +1334,7 @@ owner에서는 local view에 즉시 반응한다.
 
 이 값은 다음 이유에 의해서만 바뀐다.
 
-1. Movement
+1. Movement context가 실제 body-facing change를 요구하는 경우
 2. Continuous same-direction turn intent
 3. Anatomical-limit correction
 4. ADS / 이후 명시적으로 허용한 strong-action context
@@ -1269,18 +1391,30 @@ derived state가 이 순서를 역으로 drive하지 않는다.
 
 ### Body-target priority
 
-#### A. Ground movement
+#### A. Ground movement context
 
-실제 horizontal movement가 충분하면 Movement Direction이 기본 body target이다.
+실제 horizontal movement가 충분하면 `MovementDirectionYaw`를 travel truth로 갱신한다.
+
+하지만:
 
 ~~~text
 moving
-→ DesiredVisualBodyYaw ≈ MovementDirectionYaw
+→ DesiredVisualBodyYaw = MovementDirectionYaw
 ~~~
 
-View는 body target을 직접 덮어쓰지 않는다.
+를 일반 규칙으로 사용하지 않는다.
 
-이동하면서 옆을 보는 표현은 ViewBodyResidual로 남긴다.
+movement는 다음을 판단하는 문맥이다.
+
+~~~text
+Travel relative to VisualBody
+View relative to VisualBody
+current body continuity
+        ↓
+Does the body actually need to turn?
+~~~
+
+결과는 forward / side / backward locomotion이 서로 구분되고, body가 불필요하게 movement direction에 끌려가지 않아야 한다.
 
 #### B. Idle continuous turn intent
 
@@ -1510,7 +1644,8 @@ VB-02에서 Turn-in-Place event synchronization이 실제로 필요한 것이 �
 
 대신:
 
-- movement body target
+- movement/body continuity policy
+- forward / side / backward locomotion semantics
 - idle hold
 - anatomical correction
 - ADS adjustment
@@ -1563,13 +1698,16 @@ VB-02에서 Turn-in-Place event synchronization이 실제로 필요한 것이 �
 | Idle +30 deg glance | body stays |
 | Idle +60 deg hold 5s | body stays; no dwell chase |
 | Idle +90 deg hold | expressive residual remains if skeleton envelope allows |
-| Approach 100-110 deg | body begins minimum anatomical recovery |
+| Approach anatomical limit | body begins minimum recovery without snap |
 | Continuous right spin | body keeps following right; no wrap flip |
 | Continuous left spin | same mirrored behavior |
 | Fast right -> left reversal | body brakes then reverses without snap |
-| Move forward, View right | body = movement, residual = right look |
-| Change movement direction | body target follows new travel direction smoothly |
-| Stop moving while View offset | body retains last orientation |
+| Forward locomotion | `Direction` reads forward relative to VisualBody |
+| Backpedal | VisualBody can stay stable while `Direction` reads backward |
+| Side locomotion | side direction remains readable without forced body snap |
+| Continue travel then look back | does not collapse into the same intent as intentional backpedal |
+| Change movement direction | no unnecessary 180 degree body flip |
+| Stop moving while View offset | body retains last valid orientation |
 | ADS enter / exit | tighter response allowed, no snap |
 | +-180 crossing | turn intent sign remains correct |
 | Spawn / restart | no first-frame large offset |
@@ -1583,7 +1721,7 @@ VB-01은 아래가 모두 만족될 때만 완료다.
 2. dwell-only body catch-up이 없다.
 3. multi-revolution turn이 양방향 모두 안정적이다.
 4. +-180 wrap에서 direction flip이 없다.
-5. movement direction과 body direction이 의미상 일치한다.
+5. movement direction과 body-facing direction이 분리되어도 forward / side / backward intent가 observer에게 일관되게 읽힌다.
 6. ViewBodyResidual이 이후 Look solve의 올바른 canonical source다.
 7. calculated VisualBodyYaw와 실제 visual pelvis/body orientation이 일치한다.
 8. owner / authority / simulated proxy에서 큰 모순이 없다.
@@ -1604,7 +1742,147 @@ VB-01 완료 시에도 다음은 남아도 된다.
 
 ### Stop rule
 
-VB-01 검수 전 VB-02로 자동 진행하지 않는다.
+VB-01 결과를 사용자 visual gate로 동결한 뒤 `VB-01-Fix`로 이동한다. 바로 VB-02로 진행하지 않는다.
+
+---
+
+## VB-01-Fix - Consolidation / Refactor
+
+### Purpose
+
+현재 잘 되는 결과를 유지하면서, 누적된 실험 로직을 **더 짧고 명확한 책임 구조로 정리**한다.
+
+새 기능을 구현하는 checkpoint가 아니다.
+
+핵심 기준:
+
+~~~text
+same or better visible result
++
+less duplicated logic
++
+fewer unnecessary states
++
+clearer ownership
+~~~
+
+### Work - ViewBodyRotation
+
+- `TickComponent()` 안의 view / movement / target / anatomy / integration 책임을 의미 단위로 분리
+- 사용되지 않는 cached state / parameter 제거
+- 동일 angle / residual의 중복 계산 제거
+- movement/body continuity rule을 최소 규칙으로 정리
+- forward / side / backward intent regression
+- current continuous-turn / wrap / reversal 결과 유지
+
+함수를 나누는 것 자체가 목적은 아니다. 읽기 쉬워지지 않으면 쪼개지 않는다.
+
+### Work - CharacterAnimInstance
+
+현재 큰 update flow를 최소 다음 책임으로 읽히게 만든다.
+
+~~~text
+Locomotion
+Look Presentation
+Weapon Presentation Adapter
+~~~
+
+- `NativeUpdateAnimation()`의 monolithic 계산 축소
+- Look과 Weapon 계산의 불필요한 결합 제거
+- Head / Torso response 현재 visual result 유지
+- weapon-specific world target / convergence math가 AnimInstance에 남아야 하는지 검토
+- TP Presentation owner로 이동할 값과 skeleton solve에 남길 값을 구분
+- 불필요한 debug / transient output 제거
+
+새 generic animation framework는 만들지 않는다.
+
+### Work - Weapon solve simplification
+
+현재 iterative muzzle solve는 결과를 기준으로 검증한다.
+
+~~~text
+12 iterations
+vs
+4
+vs
+2
+vs
+1
+~~~
+
+을 필요한 경우 측정하고, muzzle error / close-range stability / visible arm pose가 동등한 최소 복잡도를 선택한다.
+
+단, 단순히 코드량을 줄이기 위해 품질을 희생하지 않는다.
+
+### Work - Relaxed weapon decoupling
+
+non-ADS에서는 Head Look이 Right Clavicle / Weapon 방향을 직접 drive하지 않게 한다.
+
+현재 `RelaxedRightClavicleAimShare`와:
+
+~~~text
+HeadLookQuaternion
+→ RightClavicleAimRotation
+~~~
+
+경로를 제거 테스트한다.
+
+필요성이 시각적으로 증명되지 않으면 제거한다.
+
+목표:
+
+~~~text
+Relaxed
+Head / Neck / Spine = View
+Weapon = body-relative ready pose
+
+ADS
+Weapon = presentation aim target
+~~~
+
+### Work - Diagnostics cleanup
+
+- Root Axis diagnostic assets가 더 필요한지 확인
+- 완료된 실험 asset 제거 후보 정리
+- `Config/DefaultEditor.ini` stage 금지
+- production change와 diagnostics를 분리
+
+### Regression gate
+
+VB-01-Fix 후 최소 다음이 리팩토링 전보다 나빠지면 안 된다.
+
+- 고개 반응 속도 / 방향
+- forward / backward / side locomotion
+- continuous right / left spin
+- fast reversal
+- ADS enter / exit
+- close-range aim stability
+- muzzle alignment
+- owner / observer semantic agreement
+
+### Non-goals
+
+- Turn-in-Place 구현
+- Weapon Obstruction
+- ragdoll
+- Physics Asset weapon hit
+- Crouch / Walk / Sprint / Jump
+- 새로운 generic framework
+
+### Completion gate
+
+1. 현재 visual result가 유지된다.
+2. ViewBodyRotation의 policy flow가 한 눈에 추적 가능하다.
+3. AnimInstance에서 Look / Locomotion / Weapon 책임이 구분된다.
+4. 불필요한 state / parameter / duplicated calculation이 제거된다.
+5. relaxed Head Look이 weapon을 의도치 않게 끌고 가지 않는다.
+6. 필요 이상의 iterative solve가 남지 않는다.
+7. diagnostics / editor noise가 production change에서 분리된다.
+8. 사용자 visual gate를 통과한다.
+
+### Stop rule
+
+VB-01-Fix 검수 전 VB-02로 진행하지 않는다.
 
 ---
 
@@ -2241,7 +2519,7 @@ Look target은 한 번 명확한 space로 변환한 뒤 일관된 기준으로 s
 
 ---
 
-### Interaction with VB-04 Weapon Aim
+### Interaction with VB-04 Revolver Weapon Presentation
 
 VB-03와 VB-04는 서로 다른 목적을 가진다.
 
@@ -2250,7 +2528,7 @@ VB-03
 Look / Attention
 
 VB-04
-Weapon / Muzzle Alignment
+Revolver Weapon Presentation / Muzzle Alignment
 ~~~
 
 문제:
@@ -2483,27 +2761,107 @@ VB-03 검수 전 VB-04로 자동 진행하지 않는다.
 
 ---
 
-## VB-04 - Revolver Weapon Aim
+## VB-04 - Revolver Weapon Presentation
 
-### Work
+### Purpose
 
-- keep current convergence / parallax target math
-- convert target into typed muzzle / hand effector input
-- remove direct hand-only final correction
-- distribute across chest / clavicle / arm
-- wrist handles final residual
-- separate WeaponAimAlpha from Look
-- ADS sustained alpha
-- optional hip-fire pulse
+VB-04는 ADS aim 하나만 맞추는 단계가 아니다.
+
+다른 플레이어가 보았을 때 revolver가 **플레이어의 실제 weapon intent와 모순되지 않게 보이도록** TP weapon presentation을 마무리한다.
+
+핵심 계약:
+
+~~~text
+Relaxed / Non-ADS
+View may move independently.
+Head / Neck / Spine express attention.
+Weapon remains body-relative ready pose.
+
+ADS
+Weapon commits toward the View / presentation aim target.
+Chest / Clavicle / Arm / Wrist may participate.
+~~~
+
+주변 player를 감지해서 총구가 그들을 피하도록 하는 별도 social-safe system은 만들지 않는다.
+
+### A - ADS Weapon Aim
+
+- current convergence / parallax target math에서 실제 필요한 부분 유지
+- weapon-specific world target / convergence ownership은 `ULuxRevolverThirdPersonPresentationComponent` 쪽을 우선
+- AnimInstance는 skeleton에 필요한 typed pose target / alpha를 소비
+- hand-only final correction 제거
+- chest / clavicle / arm / wrist가 필요한 만큼 분담
+- `WeaponAimAlpha`와 Look alpha 분리
+- close character target / minimum convergence behavior 안정성 유지
+- current iterative solve가 과하면 같은 결과를 내는 최소 solve로 축소
+
+### B - Relaxed weapon decoupling verification
+
+VB-01-Fix에서 제거한 Head Look -> Weapon coupling이 최종 graph에서도 되살아나지 않는지 확인한다.
+
+~~~text
+Non-ADS side glance
+→ head turns
+→ weapon does not independently point somewhere else because of that glance
+~~~
+
+총이 body-relative pose 안에서 자연스럽게 흔들리는 것은 허용한다.
+
+Head gaze가 weapon direction의 직접 source가 되는 것은 금지한다.
+
+### C - Third-Person Reload Alignment
+
+현재 1P reload는 정상인데 TP character의 손이 따로 노는 현상을 검증 / 교정한다.
+
+확인:
+
+- R21 source reload
+- retargeted TP reload
+- right / left hand relation
+- revolver grip
+- cylinder interaction
+- bullet insertion point
+- Position 1~6 start position
+- Open / Close / Cancel
+- Reload 중 Weapon Aim IK가 authored hand motion을 덮는지
+
+gameplay reload timing / chamber truth는 변경하지 않는다.
+
+### D - Third-Person Fire / Trigger Finger Verification
+
+TP Fire animation 자체는 이미 존재한다고 가정한다.
+
+~~~text
+A_Lux_TP_Revolver_FireAim
+A_Lux_TP_Revolver_FireHip
+~~~
+
+다음 순서로 검증한다.
+
+1. R21 source fire animation에 trigger-finger motion이 있는가
+2. retargeted TP animation에 finger chain motion이 보존되는가
+3. AnimGraph / layer / IK가 그 motion을 덮는가
+4. 이미 정상이라면 아무 로직도 추가하지 않는다
+5. 유실된 경우에만 최소 correction을 한다
+
+Fire 시:
+
+- grip은 유지
+- trigger finger가 보이면 실제 trigger timing과 자연스럽게 일치
+- recoil / muzzle flash와 큰 timing contradiction 없음
 
 ### Gate
 
-- relaxed side look does not drag gun rigidly with head
-- ADS muzzle presentation aligns
-- close target clamp remains stable
-- shoulder / elbow / wrist share correction
-- pelvis / feet never snap because of weapon aim
-- server ballistic result unchanged
+- relaxed side look가 weapon을 직접 끌고 가지 않는다.
+- non-ADS weapon은 body-relative ready pose로 읽힌다.
+- ADS muzzle presentation이 View / aim target과 일치한다.
+- close target에서 aim solve가 진동하지 않는다.
+- shoulder / elbow / wrist correction이 과도하지 않다.
+- TP reload 손 / 총 / cylinder interaction이 납득 가능하다.
+- TP fire finger는 실제 asset capability대로 정확히 표현된다.
+- Fire / Reload montage가 Weapon Aim IK에 의해 망가지지 않는다.
+- pelvis / feet가 weapon aim 때문에 snap하지 않는다.
+- server ballistic result는 변경되지 않는다.
 
 ### Stop rule
 
@@ -2538,6 +2896,10 @@ VB-05 검수 전 VB-06으로 자동 진행하지 않는다.
 
 ## VB-06 - Multiplayer Presentation QA
 
+### Purpose
+
+실제 6인 온라인 최종 QA가 아니라, VB presentation chain의 **2~3 player replication sanity**를 닫는 단계다.
+
 ### Work
 
 - confirm minimal network state
@@ -2547,7 +2909,9 @@ VB-05 검수 전 VB-06으로 자동 진행하지 않는다.
 - JIP
 - repeated continuous spin
 - movement while looking away
+- forward / backward / side locomotion intent
 - ADS while moving / turning
+- TP Reload / Fire observer presentation
 
 ### Gate
 
@@ -2555,13 +2919,145 @@ VB-05 검수 전 VB-06으로 자동 진행하지 않는다.
 - observer reads the same movement / attention intent
 - remote body direction stable
 - remote head look stable
+- remote weapon intent does not contradict owner intent
 - no packet-step neck twitch
 - no stale turn event replay
 - no wrap-direction reversal
+- no stale TP action replay on JIP
+
+### Stop rule
+
+VB-06 검수 전 VB-07로 자동 진행하지 않는다.
 
 ---
 
-# 15. Debug measurements
+## VB-07 - Weapon Obstruction
+
+### Purpose
+
+EOS 전에 revolver가 벽 / 근거리 geometry와 겹쳐 보이는 문제를 presentation 수준에서 마무리한다.
+
+이 단계는 VB-04 weapon aim을 다시 설계하지 않는다.
+
+### Detection
+
+weapon / muzzle가 차지하려는 공간과 world geometry를 검사한다.
+
+우선:
+
+- line trace 하나보다 weapon volume을 반영하는 small sphere / capsule sweep 검토
+- owner에서 즉시 계산
+- 필요 없는 replicated obstruction state는 만들지 않음
+- character / weapon self collision은 명확히 ignore
+
+결과는 가능하면 연속 값으로 표현한다.
+
+~~~text
+ObstructionAlpha
+0.0 = clear
+1.0 = fully obstructed
+~~~
+
+### Presentation
+
+`ObstructionAlpha`에 따라:
+
+- weapon retract
+- 필요하면 lower
+- ADS pose와 자연스럽게 blend
+- wall edge에서 ON/OFF flicker가 없도록 hysteresis / smoothing
+
+을 적용한다.
+
+처음부터 복잡한 authored state machine을 만들지 않는다.
+
+### Fire policy
+
+presentation obstruction과 gameplay fire authority를 분리한다.
+
+~~~text
+Presentation
+→ owner visual retract / lower
+
+Gameplay
+→ 실제 muzzle clearance가 막힌 경우 fire를 허용할지 별도 결정
+~~~
+
+실제 fire reject가 필요하면 Server에서 최소 muzzle-clearance 검사를 한다.
+
+camera만 벽 밖에 있고 muzzle는 벽 안인 경우를 반드시 검증한다.
+
+### FP / TP
+
+FP가 1차 체감 대상이다.
+
+TP observer에게도 weapon clipping / intent contradiction이 눈에 띄면 같은 semantic `ObstructionAlpha` 또는 동등한 local presentation을 소비하게 한다.
+
+exact bone / pose state를 network replicate하지 않는다.
+
+### Do not create
+
+- generic WeaponObstruction framework
+- 주변 player를 피해서 총구를 돌리는 social avoidance solver
+- AnimInstance 내부의 world collision trace ownership
+- obstruction 때문에 ballistic truth 자체를 presentation code에서 수정하는 구조
+
+### Gate
+
+- wall approach가 자연스럽게 retract / lower된다.
+- wall edge에서 flicker / pop이 없다.
+- ADS 진입 / 해제 중 obstruction이 안정적이다.
+- camera와 muzzle가 다른 side에 있을 때 정책이 명확하다.
+- 필요한 경우 Server fire clearance와 owner presentation이 모순되지 않는다.
+- TP observer에게 심한 wall clipping이 남지 않는다.
+- network state가 불필요하게 늘어나지 않는다.
+
+### Stop rule
+
+VB-07 검수 후 EOS migration / configuration으로 이동한다.
+
+---
+
+## Post-VB execution order
+
+~~~text
+VB-07 complete
+→ EOS migration / configuration
+→ Combat / Death Finalization
+→ 01-G real six-player QA
+~~~
+
+### EOS
+
+현재 session abstraction을 가능한 한 유지한 채 backend를 EOS / 필요 시 EOSPlus로 구성한다.
+
+실제 원격 Create / Find / Join / Destroy와 Listen Server를 검증한다.
+
+### Combat / Death Finalization
+
+01-G 전에:
+
+- Physics Asset 기반 weapon hit
+- capsule-only weapon hit 제거
+- dedicated weapon trace policy
+- death ragdoll
+- death 시 ViewBody / TIP / Look / Weapon IK / active presentation 종료
+
+를 닫는다.
+
+### 01-G
+
+실제:
+
+~~~text
+Host + 5 Clients
+~~~
+
+환경에서 movement / View-Body / TIP / Look / ADS / Fire / Reload / Weapon Obstruction / hit / death / latency / JIP / leave / teardown을 함께 검증한다.
+
+---
+
+# 15. Debug measurements# 15. Debug measurements
 
 각 checkpoint에서 화면 느낌과 함께 최소 다음 값을 본다.
 
@@ -2612,15 +3108,17 @@ Expected:
 - upper body keeps the social signal
 - observer clearly sees the stare
 
-## Scenario C - Walk while looking
+## Scenario C - Move while looking
 
-플레이어가 한 방향으로 이동하면서 다른 방향을 본다.
+플레이어가 이동하면서 View를 다른 방향으로 돌린다.
 
 Expected:
 
-- legs / pelvis communicate travel direction
+- locomotion communicates actual travel direction
+- VisualBody is not automatically overwritten by travel yaw
 - head / torso communicate attention direction
-- both intentions are readable simultaneously
+- forward / side / backward relative motion remains readable
+- continuing travel then looking back does not collapse into intentional backpedal
 
 ## Scenario D - Spin
 
@@ -2663,6 +3161,17 @@ Expected:
 - head / upper body visibly redirect attention
 - observer can read the glance without emote or HUD
 
+## Scenario H - Relaxed weapon intent
+
+플레이어가 non-ADS 상태에서 고개만 다른 방향으로 돌린다.
+
+Expected:
+
+- head / neck / torso can express the look
+- revolver remains body-relative
+- Head Look alone does not steer clavicle / weapon toward an unrelated direction
+- entering ADS intentionally commits the weapon toward the aim target
+
 ---
 
 # 17. Do not do
@@ -2675,6 +3184,10 @@ Expected:
 - 160% additive 문제를 숫자만 줄여 숨기지 않는다.
 - Head / Neck / Spine가 하나의 SmoothedLookRotation으로 동시에 반응하게 두지 않는다.
 - Look과 Weapon Aim을 하나의 monolithic solver에서 경쟁시키지 않는다.
+- relaxed Head Look을 revolver direction의 직접 source로 사용하지 않는다.
+- 주변 player를 검사해 weapon이 자동으로 사람을 피하는 social-safe solver를 만들지 않는다.
+- Weapon Obstruction world trace를 AnimInstance 책임으로 넣지 않는다.
+- VB-01-Fix에서 새 기능을 추가하지 않는다.
 - bone transform을 replicate하지 않는다.
 - RootYawOffset을 canonical gameplay/presentation truth로 승격하지 않는다.
 - root/body graph 오류를 upper-body IK로 숨기지 않는다.
